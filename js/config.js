@@ -14,6 +14,5 @@ export const HAS_ETHERSCAN_CONFIG = Boolean(ETH_KEY && ETH_KEY !== 'replace-me')
 export const SUPPORTED_CHAINS = [
   { id: 'ethereum', name: 'Ether', icon: 'ETH' },
   { id: 'base-wallet', name: 'Base', icon: 'BASE' },
-  { id: 'binancesmartchain', name: 'BSC', icon: 'BSC' },
-  { id: 'solana', name: 'Solana', icon: 'SOL' }
+  { id: 'binancesmartchain', name: 'BSC', icon: 'BSC' }
 ];

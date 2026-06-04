@@ -8,7 +8,7 @@ export const DEFAULT_TRACKED_PAIRS = [
   'BIOUSDT'
 ];
 
-export const APP_STORAGE_VERSION = '2026-05-09-2';
+export const APP_STORAGE_VERSION = '2026-05-20-1';
 
 export const state = {
   tracked: [...DEFAULT_TRACKED_PAIRS],

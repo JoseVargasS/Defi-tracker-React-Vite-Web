@@ -75,6 +75,7 @@
 .btn-search,
 .btn-copy,
 .btn-trash,
+.btn-clear-storage,
 #btnFetchWallet {
   display: flex;
   align-items: center;
@@ -127,6 +128,11 @@
 /* Icon sizes inside buttons */
 .btn-search img, .btn-trash img { width: 16px; height: 16px; display: block; }
 .btn-copy img               { width: 14px; height: 14px; display: block; }
+
+.btn-clear-storage {
+  font-size: 0.75rem;
+  padding: 8px 10px;
+}
 
 /* ── Wallet Data ── */
 #walletData {

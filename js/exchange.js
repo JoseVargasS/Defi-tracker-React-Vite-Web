@@ -2,6 +2,7 @@
 import { BINANCE_API } from './config.js';
 import { makeRequest } from './utils.js';
 import { state } from './state.js';
+import { STORAGE_KEYS } from './storage.js';
 
 // ── In-memory cache for klines (60s TTL) ──────────────────────────────────────
 const _klinesCache = new Map();
@@ -28,7 +29,7 @@ export async function fetch24hStats(symbol) {
 }
 
 // ── Batch price fetch (ONE request for multiple symbols) ──────────────────────
-// Returns { BTCUSDT: "84000.00", ETHUSDT: "2100.00", ... }
+// Returns { BTCUSDT: "84000.00", ETHBTC: "0.03", ... }
 export async function fetchPriceBatch(symbols) {
   if (!symbols || symbols.length === 0) return {};
   try {
@@ -128,24 +129,24 @@ export async function fetchKlines(symbol, interval) {
 
 // ── Invalidate klines cache entry (call when switching pair/interval) ──────────
 // ── fetchCoinsList with 24h localStorage cache ─────────────────────────────────
-const COINS_CACHE_KEY = 'coinsListCache';
 const COINS_CACHE_TTL = 24 * 60 * 60 * 1000;
 
 export async function fetchCoinsList() {
   try {
-    const raw = localStorage.getItem(COINS_CACHE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEYS.coinsListCache);
     if (raw) {
       const { ts, data } = JSON.parse(raw);
-      if (Date.now() - ts < COINS_CACHE_TTL) {
+      const hasNonUsdtPairs = Array.isArray(data) && data.some(item => item?.quote && item.quote !== 'USDT');
+      if (Array.isArray(data) && hasNonUsdtPairs && Date.now() - ts < COINS_CACHE_TTL) {
         state.coinsList = data;
         return;
       }
     }
     const res = await makeRequest(`${BINANCE_API}/exchangeInfo`);
     state.coinsList = (res.symbols || [])
-      .filter(s => s.quoteAsset === 'USDT')
+      .filter(s => s.status === 'TRADING' && s.isSpotTradingAllowed)
       .map(s => ({ symbol: s.symbol, base: s.baseAsset, quote: s.quoteAsset }));
-    localStorage.setItem(COINS_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: state.coinsList }));
+    localStorage.setItem(STORAGE_KEYS.coinsListCache, JSON.stringify({ ts: Date.now(), data: state.coinsList }));
   } catch (error) {
     console.error('Error fetching coins list:', error);
     state.coinsList = [];

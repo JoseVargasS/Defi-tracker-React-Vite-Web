@@ -30,7 +30,7 @@ const TOKEN_ICON_FALLBACKS = {
 
 let currentTxAddress = null;
 const TX_PAGE_SIZE = 10;
-const PRICE_CONCURRENCY = 4;
+const PRICE_CONCURRENCY = 1;
 const ETHERSCAN_PAGE_LIMIT = 300;
 
 async function mapWithConcurrency(items, limit, mapper) {
@@ -269,6 +269,43 @@ function renderTransactionRow(tbody, tx) {
   return { row, tx, meta };
 }
 
+async function fetchEtherscanTransactions(address, chainId) {
+  const safeAddress = encodeURIComponent(address);
+  const tokentxUrl = `${ETH_API}?chainid=${chainId}&module=account&action=tokentx&address=${safeAddress}&sort=desc&page=1&offset=${ETHERSCAN_PAGE_LIMIT}&apikey=${ETH_KEY}`;
+  const txlistUrl = `${ETH_API}?chainid=${chainId}&module=account&action=txlist&address=${safeAddress}&sort=desc&page=1&offset=${ETHERSCAN_PAGE_LIMIT}&apikey=${ETH_KEY}`;
+
+  const [r1, r2] = await Promise.allSettled([makeRequest(tokentxUrl), makeRequest(txlistUrl)]);
+  const tokenTxs = (r1.status === 'fulfilled' && r1.value && Array.isArray(r1.value.result)) ? r1.value.result : [];
+  const normalTxs = (r2.status === 'fulfilled' && r2.value && Array.isArray(r2.value.result)) ? r2.value.result : [];
+
+  const nativeAsTokenStyle = normalTxs
+    .filter(tx => tx && tx.timeStamp)
+    .map(tx => ({
+      ...tx,
+      tokenSymbol: 'ETH',
+      tokenDecimal: 18,
+      value: tx.value ?? '0'
+    }));
+
+  const combined = [...tokenTxs, ...nativeAsTokenStyle];
+  const seen = new Set();
+  const dedup = [];
+
+  for (const tx of combined) {
+    const key = `${tx.hash || tx.transactionHash || tx.txHash}-${tx.tokenSymbol || ''}-${String(tx.value || '')}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const normalized = { ...tx };
+    normalized.hash = normalized.hash || normalized.transactionHash || normalized.txHash || normalized.hash;
+    normalized.timeStamp = normalized.timeStamp || normalized.timestamp || normalized.time || normalized.blockNumber || normalized.timeStamp;
+    dedup.push(normalized);
+  }
+
+  dedup.sort((a, b) => (Number(b.timeStamp) || 0) - (Number(a.timeStamp) || 0));
+  return dedup;
+}
+
 export async function loadTx(networkId = 'ethereum') {
   const net = networks[networkId];
   const tbody = document.getElementById(net.tbodyId);
@@ -315,10 +352,8 @@ export async function loadTx(networkId = 'ethereum') {
 
 export async function fetchAndShowTransactions(address, networkId = 'ethereum') {
   if (networkId === 'all') {
-    await Promise.all([
-      fetchAndShowTransactions(address, 'ethereum'),
-      fetchAndShowTransactions(address, 'base-wallet')
-    ]);
+    await fetchAndShowTransactions(address, 'ethereum');
+    await fetchAndShowTransactions(address, 'base-wallet');
     return;
   }
 
@@ -338,115 +373,86 @@ export async function fetchAndShowTransactions(address, networkId = 'ethereum') 
         return;
       }
 
-      const safeAddress = encodeURIComponent(address);
-      const tokentxUrl = `${ETH_API}?chainid=1&module=account&action=tokentx&address=${safeAddress}&sort=desc&page=1&offset=${ETHERSCAN_PAGE_LIMIT}&apikey=${ETH_KEY}`;
-      const txlistUrl = `${ETH_API}?chainid=1&module=account&action=txlist&address=${safeAddress}&sort=desc&page=1&offset=${ETHERSCAN_PAGE_LIMIT}&apikey=${ETH_KEY}`;
-
-      const [r1, r2] = await Promise.allSettled([makeRequest(tokentxUrl), makeRequest(txlistUrl)]);
-      const tokenTxs = (r1.status === 'fulfilled' && r1.value && Array.isArray(r1.value.result)) ? r1.value.result : [];
-      const normalTxs = (r2.status === 'fulfilled' && r2.value && Array.isArray(r2.value.result)) ? r2.value.result : [];
-
-      const nativeAsTokenStyle = normalTxs
-        .filter(tx => tx && tx.timeStamp)
-        .map(tx => ({
-          ...tx,
-          tokenSymbol: 'ETH',
-          tokenDecimal: 18,
-          value: tx.value ?? '0'
-        }));
-
-      const combined = [...tokenTxs, ...nativeAsTokenStyle];
-      const seen = new Set();
-      const dedup = [];
-
-      for (const tx of combined) {
-        const key = `${tx.hash || tx.transactionHash || tx.txHash}-${tx.tokenSymbol || ''}-${String(tx.value || '')}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-
-        const normalized = { ...tx };
-        normalized.hash = normalized.hash || normalized.transactionHash || normalized.txHash || normalized.hash;
-        normalized.timeStamp = normalized.timeStamp || normalized.timestamp || normalized.time || normalized.blockNumber || normalized.timeStamp;
-        dedup.push(normalized);
-      }
-
-      dedup.sort((a, b) => (Number(b.timeStamp) || 0) - (Number(a.timeStamp) || 0));
-      net.txList = dedup;
+      net.txList = await fetchEtherscanTransactions(address, 1);
     } else if (networkId === 'base-wallet') {
-      if (!HAS_COINSTATS_CONFIG) {
-        if (tbody) setTableMessage(tbody, 'Falta COINSTATS_API_KEY en js/config.local.js para cargar transacciones Base.');
+      if (!HAS_COINSTATS_CONFIG && !HAS_ETHERSCAN_CONFIG) {
+        if (tbody) setTableMessage(tbody, 'Falta COINSTATS_API_KEY o ETH_KEY en js/config.local.js para cargar transacciones Base.');
         return;
       }
 
-      const safeAddress = encodeURIComponent(address);
-      const url = `${COINSTATS_API}/wallet/transactions?address=${safeAddress}&connectionId=base-wallet&limit=150`;
-      let response = await fetch(url, {
-        headers: { 'X-API-KEY': COINSTATS_API_KEY }
-      });
-
-      if (response.status === 409) {
-        const patchUrl = `${COINSTATS_API}/wallet/transactions?address=${safeAddress}&connectionId=base-wallet`;
-        fetch(patchUrl, {
-          method: 'PATCH',
-          headers: { 'X-API-KEY': COINSTATS_API_KEY }
-        }).catch(error => console.warn('Base sync trigger failed:', error));
-
-        await new Promise(resolve => setTimeout(resolve, 1200));
-        response = await fetch(url, {
-          headers: { 'X-API-KEY': COINSTATS_API_KEY }
+      let loadedFromCoinStats = false;
+      if (HAS_ETHERSCAN_CONFIG) {
+        net.txList = await fetchEtherscanTransactions(address, 8453);
+      } else if (HAS_COINSTATS_CONFIG) {
+        const safeAddress = encodeURIComponent(address);
+        const url = `${COINSTATS_API}/wallet/transactions?address=${safeAddress}&connectionId=base-wallet&limit=150`;
+        let response = await fetch(url, {
+          credentials: 'omit',
+          headers: { 'Accept': 'application/json', 'X-API-KEY': COINSTATS_API_KEY }
         });
-      }
 
-      if (response.ok) {
-        const data = await response.json();
-        const rawResult = data.result || [];
-        const flattenedTxList = [];
+        if (response.status === 409) {
+          const patchUrl = `${COINSTATS_API}/wallet/transactions?address=${safeAddress}&connectionId=base-wallet`;
+          fetch(patchUrl, {
+            method: 'PATCH',
+            credentials: 'omit',
+            headers: { 'Accept': 'application/json', 'X-API-KEY': COINSTATS_API_KEY }
+          }).catch(error => console.warn('Base sync trigger failed:', error));
 
-        for (const res of rawResult) {
-          const hash = res.hash ? res.hash.id : (res.id || '0x');
-          const timeStamp = res.date ? Math.floor(new Date(res.date).getTime() / 1000) : 0;
-
-          if (res.transactions && res.transactions.length) {
-            for (const innerTx of res.transactions) {
-              if (!innerTx.items || !innerTx.items.length) continue;
-              for (const item of innerTx.items) {
-                flattenedTxList.push({
-                  hash,
-                  timeStamp,
-                  from: item.fromAddress || '',
-                  to: item.toAddress || '',
-                  tokenSymbol: item.coin ? item.coin.symbol : '?',
-                  tokenDecimal: 0,
-                  value: item.count || 0,
-                  imgUrl: (item.coin && item.coin.icon) || (res.mainContent && res.mainContent.coinIcons && res.mainContent.coinIcons[0]) || null
-                });
-              }
-            }
-          } else {
-            flattenedTxList.push({
-              hash,
-              timeStamp,
-              from: '',
-              to: '',
-              tokenSymbol: res.coinData ? res.coinData.symbol : '?',
-              tokenDecimal: 0,
-              value: res.coinData ? res.coinData.count : 0,
-              imgUrl: (res.mainContent && res.mainContent.coinIcons && res.mainContent.coinIcons[0]) || null
-            });
-          }
+          await new Promise(resolve => setTimeout(resolve, 1200));
+          response = await fetch(url, {
+            credentials: 'omit',
+            headers: { 'Accept': 'application/json', 'X-API-KEY': COINSTATS_API_KEY }
+          });
         }
 
-        flattenedTxList.sort((a, b) => (Number(b.timeStamp) || 0) - (Number(a.timeStamp) || 0));
-        net.txList = flattenedTxList;
-      } else if (tbody) {
-        setTableMessage(
-          tbody,
-          response.status === 401
-            ? 'CoinStats rechazo la API key (401). Revisa COINSTATS_API_KEY en .env.'
-            : response.status === 409
-            ? 'La red se esta sincronizando... Refresca en unos segundos.'
-            : 'No se pudieron cargar las transacciones de Base.'
-        );
+        if (response.ok) {
+          const data = await response.json();
+          const rawResult = data.result || [];
+          const flattenedTxList = [];
+
+          for (const res of rawResult) {
+            const hash = res.hash ? res.hash.id : (res.id || '0x');
+            const timeStamp = res.date ? Math.floor(new Date(res.date).getTime() / 1000) : 0;
+
+            if (res.transactions && res.transactions.length) {
+              for (const innerTx of res.transactions) {
+                if (!innerTx.items || !innerTx.items.length) continue;
+                for (const item of innerTx.items) {
+                  flattenedTxList.push({
+                    hash,
+                    timeStamp,
+                    from: item.fromAddress || '',
+                    to: item.toAddress || '',
+                    tokenSymbol: item.coin ? item.coin.symbol : '?',
+                    tokenDecimal: 0,
+                    value: item.count || 0,
+                    imgUrl: (item.coin && item.coin.icon) || (res.mainContent && res.mainContent.coinIcons && res.mainContent.coinIcons[0]) || null
+                  });
+                }
+              }
+            } else {
+              flattenedTxList.push({
+                hash,
+                timeStamp,
+                from: '',
+                to: '',
+                tokenSymbol: res.coinData ? res.coinData.symbol : '?',
+                tokenDecimal: 0,
+                value: res.coinData ? res.coinData.count : 0,
+                imgUrl: (res.mainContent && res.mainContent.coinIcons && res.mainContent.coinIcons[0]) || null
+              });
+            }
+          }
+
+          flattenedTxList.sort((a, b) => (Number(b.timeStamp) || 0) - (Number(a.timeStamp) || 0));
+          net.txList = flattenedTxList;
+          loadedFromCoinStats = true;
+        }
+      }
+
+      if (!loadedFromCoinStats && !HAS_ETHERSCAN_CONFIG && tbody) {
+        setTableMessage(tbody, 'No se pudieron cargar transacciones Base.');
       }
     }
 

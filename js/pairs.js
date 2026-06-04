@@ -12,6 +12,7 @@ import {
   createAdvancedTooltipPlugin,
   normalizeKline
 } from './chartAdvanced.js';
+import { writeTrackedPairs } from './storage.js';
 
 const CANDLE_COLORS = {
   up: CHART_THEME.up,
@@ -21,7 +22,35 @@ const CANDLE_COLORS = {
 
 const PANEL_STACK = 'market-panels';
 
-const getCoinName = symbol => names[symbol.replace('USDT', '').toUpperCase()] || symbol.replace('USDT', '');
+const getPairMeta = symbol => {
+  const normalized = String(symbol || '').toUpperCase();
+  const listed = state.coinsList?.find(item => item.symbol === normalized);
+  if (listed) return listed;
+
+  const knownQuotes = ['USDT', 'USDC', 'FDUSD', 'BTC', 'ETH', 'BNB', 'TRY', 'EUR', 'BRL', 'DAI'];
+  const quote = knownQuotes.find(item => normalized.endsWith(item)) || '';
+  return {
+    symbol: normalized,
+    base: quote ? normalized.slice(0, -quote.length) : normalized,
+    quote
+  };
+};
+
+const getPairLabel = symbol => {
+  const { base, quote } = getPairMeta(symbol);
+  return quote ? `${base}/${quote}` : symbol;
+};
+
+const getCoinName = symbol => {
+  const { base } = getPairMeta(symbol);
+  return names[base.toUpperCase()] || base;
+};
+
+const formatPairPrice = (price, quote) => {
+  const formatted = formatPrice(price);
+  if (formatted === '-') return formatted;
+  return quote ? `${formatted} ${quote}` : formatted;
+};
 
 const timeUnitByInterval = interval => {
   if (['3M', '1M'].includes(interval)) return 'month';
@@ -271,9 +300,11 @@ const crosshairPlugin = {
   afterInit(chart) {
     if (!chart.canvas) return;
     chart.crosshair = { x: null, y: null, snapIndex: null };
+    const canvas = chart.canvas;
 
     const moveListener = event => {
-      const rect = chart.canvas.getBoundingClientRect();
+      if (!chart.canvas || chart.canvas !== canvas || !chart.ctx) return;
+      const rect = canvas.getBoundingClientRect();
       const mouseX = event.clientX - rect.left;
       const mouseY = event.clientY - rect.top;
       let snapIndex = null;
@@ -295,22 +326,25 @@ const crosshairPlugin = {
     };
 
     const leaveListener = () => {
+      if (!chart.canvas || chart.canvas !== canvas || !chart.ctx) return;
       chart.crosshair = { x: null, y: null, snapIndex: null };
       chart.draw();
     };
 
-    chart.canvas.addEventListener('mousemove', moveListener);
-    chart.canvas.addEventListener('mouseleave', leaveListener);
+    canvas.addEventListener('mousemove', moveListener);
+    canvas.addEventListener('mouseleave', leaveListener);
     chart.crosshair.moveListener = moveListener;
     chart.crosshair.leaveListener = leaveListener;
+    chart.crosshair.canvas = canvas;
   },
   beforeDestroy(chart) {
-    if (!chart.canvas || !chart.crosshair) return;
-    chart.canvas.removeEventListener('mousemove', chart.crosshair.moveListener);
-    chart.canvas.removeEventListener('mouseleave', chart.crosshair.leaveListener);
+    cleanupCrosshair(chart);
+  },
+  afterDestroy(chart) {
+    cleanupCrosshair(chart);
   },
   afterDraw(chart) {
-    if (!chart.crosshair || chart.crosshair.x === null || chart.crosshair.y === null) return;
+    if (!chart.ctx || !chart.chartArea || !chart.crosshair || chart.crosshair.x === null || chart.crosshair.y === null) return;
 
     const ctx = chart.ctx;
     const activeScale = getActiveYScale(chart, chart.crosshair.y);
@@ -383,9 +417,19 @@ const crosshairPlugin = {
   }
 };
 
+function cleanupCrosshair(chart) {
+  const crosshair = chart?.crosshair;
+  const canvas = crosshair?.canvas || chart?.canvas;
+  if (!canvas || !crosshair) return;
+  if (crosshair.moveListener) canvas.removeEventListener('mousemove', crosshair.moveListener);
+  if (crosshair.leaveListener) canvas.removeEventListener('mouseleave', crosshair.leaveListener);
+  chart.crosshair = null;
+}
+
 const currentPricePlugin = {
   id: 'currentPrice',
   afterDraw(chart) {
+    if (!chart.ctx || !chart.chartArea) return;
     const priceScale = chart.scales.price;
     const candles = chart.data.datasets[0]?.data;
     if (!priceScale || !candles?.length) return;
@@ -436,6 +480,7 @@ const currentPricePlugin = {
 const indicatorLegendPlugin = {
   id: 'indicatorLegend',
   afterDraw(chart) {
+    if (!chart.ctx || !chart.chartArea) return;
     const fallbackIndex = chart.data.datasets[0]?.data?.length - 1 ?? 0;
     const index = chart.crosshair?.snapIndex ?? fallbackIndex;
     const ctx = chart.ctx;
@@ -451,6 +496,8 @@ const indicatorLegendPlugin = {
       const volumePoint = volumeData[index] || lastDefined(volumeData);
       const vol = volumePoint?.y ?? 0;
       const quoteVol = volumePoint?.q ?? 0;
+      const quoteLabel = getPairMeta(chart._symbol || state.currentPair).quote || 'QUOTE';
+      const quoteVolumeLabel = `VOL(${quoteLabel})`;
       let x = chart.chartArea.left + 10;
       const y = volumeScale.top + 7;
 
@@ -464,8 +511,8 @@ const indicatorLegendPlugin = {
       ctx.fillText(compactNumber(vol), x, y);
       x += ctx.measureText(`${compactNumber(vol)}  `).width;
       ctx.fillStyle = '#aeb4bd';
-      ctx.fillText('VOL(USDT)', x, y);
-      x += ctx.measureText('VOL(USDT) ').width;
+      ctx.fillText(quoteVolumeLabel, x, y);
+      x += ctx.measureText(`${quoteVolumeLabel} `).width;
       ctx.fillStyle = CHART_THEME.stochD;
       ctx.fillText(compactNumber(quoteVol), x, y);
     }
@@ -506,8 +553,11 @@ const indicatorLegendPlugin = {
 };
 
 function createPairHtml(symbol, price, stats) {
-  const base = symbol.replace('USDT', '');
+  const { base, quote } = getPairMeta(symbol);
+  const pairLabel = getPairLabel(symbol);
   const safeBase = escapeHTML(base);
+  const safeQuote = escapeHTML(quote);
+  const safePairLabel = escapeHTML(pairLabel);
   const safeSymbol = escapeHTML(symbol);
   const safeCoinName = escapeHTML(getCoinName(symbol));
   const iconUrl = safeImageUrl(`https://assets.coincap.io/assets/icons/${base.toLowerCase()}@2x.png`);
@@ -522,14 +572,14 @@ function createPairHtml(symbol, price, stats) {
       <img src="${escapeHTML(iconUrl)}" alt="" />
     </div>
     <div class="coin-info">
-      <span class="coin-symbol">${safeBase}<span class="coin-symbol-suffix">/USDT</span></span>
+      <span class="coin-symbol">${safeBase}<span class="coin-symbol-suffix">/${safeQuote}</span></span>
       <span class="coin-name">${safeCoinName}</span>
     </div>
     <div class="pair-price-group">
-      <span class="pair-price" data-symbol="${safeSymbol}">${formatPrice(price)}</span>
+      <span class="pair-price" data-symbol="${safeSymbol}">${formatPairPrice(price, quote)}</span>
       <span class="pair-change ${changeClass}" data-symbol="${safeSymbol}">${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%</span>
     </div>
-    <button type="button" class="delete-btn" aria-label="Eliminar ${safeBase}">x</button>
+    <button type="button" class="delete-btn" aria-label="Eliminar ${safePairLabel}">x</button>
   `;
   item.querySelector('img')?.addEventListener('error', event => {
     event.currentTarget.src = 'https://cdn-icons-png.flaticon.com/512/1213/1213387.png';
@@ -572,7 +622,7 @@ export async function addTrackedPair(symbol) {
   if (!symbol || state.tracked.includes(symbol)) return;
 
   state.tracked.push(symbol);
-  localStorage.setItem('trackedPairs', JSON.stringify(state.tracked));
+  writeTrackedPairs(state.tracked);
 
   const container = document.getElementById('tracked-pairs');
   if (!container) {
@@ -590,7 +640,7 @@ export async function addTrackedPair(symbol) {
 
 function removeTrackedPair(symbol) {
   state.tracked = state.tracked.filter(item => item !== symbol);
-  localStorage.setItem('trackedPairs', JSON.stringify(state.tracked));
+  writeTrackedPairs(state.tracked);
   document.querySelector(`.tracked-pair[data-symbol="${symbol}"]`)?.remove();
 
   if (state.currentPair === symbol) {
@@ -601,6 +651,8 @@ function removeTrackedPair(symbol) {
 
 function destroyChart(canvas) {
   if (canvas) {
+    const existingChart = Chart.getChart(canvas);
+    cleanupCrosshair(existingChart);
     if (canvas._zoomHandler) canvas.removeEventListener('wheel', canvas._zoomHandler);
     if (canvas._downHandler) canvas.removeEventListener('pointerdown', canvas._downHandler);
     if (canvas._moveHandler) canvas.removeEventListener('pointermove', canvas._moveHandler);
@@ -608,6 +660,10 @@ function destroyChart(canvas) {
       canvas.removeEventListener('pointerup', canvas._upHandler);
       canvas.removeEventListener('pointercancel', canvas._upHandler);
     }
+    delete canvas._zoomHandler;
+    delete canvas._downHandler;
+    delete canvas._moveHandler;
+    delete canvas._upHandler;
   }
 
   try {
@@ -786,22 +842,24 @@ function updatePairUI(symbol, price, stats = {}) {
   const pairPrice = document.getElementById('pair-price');
   if (!pairTitle || !pairPrice) return;
 
-  const base = symbol.replace('USDT', '');
+  const { base, quote } = getPairMeta(symbol);
+  const pairLabel = getPairLabel(symbol);
   const safeBase = escapeHTML(base);
+  const safeQuote = escapeHTML(quote);
   const change = Number.parseFloat(stats.priceChange ?? 0);
   const changePct = Number.parseFloat(stats.priceChangePercent ?? 0);
   const changeClass = change > 0 ? 'positive' : change < 0 ? 'negative' : '';
   const high = Number.parseFloat(stats.highPrice ?? 0);
   const low = Number.parseFloat(stats.lowPrice ?? 0);
   const volBase = Number.parseFloat(stats.volume ?? 0);
-  const volUSDT = Number.parseFloat(stats.quoteVolume ?? 0);
+  const volQuote = Number.parseFloat(stats.quoteVolume ?? 0);
 
-  pairTitle.textContent = `${base}/USDT`;
+  pairTitle.textContent = pairLabel;
   pairPrice.innerHTML = `
-    <span>$${formatPrice(price)}</span>
+    <span>${formatPairPrice(price, quote)}</span>
     <strong class="${changeClass}">${changePct >= 0 ? '+' : ''}${changePct.toFixed(2)}%</strong>
   `;
-  document.title = `${formatPrice(price)} | ${base}/USDT | DeFi & Crypto Terminal`;
+  document.title = `${formatPairPrice(price, quote)} | ${pairLabel} | DeFi & Crypto Terminal`;
 
   let statsContainer = document.querySelector('.pair-stats');
   if (!statsContainer) {
@@ -815,7 +873,7 @@ function updatePairUI(symbol, price, stats = {}) {
     <div><span class="label">Max</span><span>${formatPrice(high)}</span></div>
     <div><span class="label">Min</span><span>${formatPrice(low)}</span></div>
     <div><span class="label">Vol ${safeBase}</span><span>${compactNumber(volBase)}</span></div>
-    <div><span class="label">Vol USDT</span><span>${compactNumber(volUSDT)}</span></div>
+    <div><span class="label">Vol ${safeQuote}</span><span>${compactNumber(volQuote)}</span></div>
   `;
 }
 

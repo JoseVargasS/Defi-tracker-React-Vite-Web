@@ -148,7 +148,7 @@ export function createAdvancedTooltipPlugin() {
   return {
     id: 'advancedTooltip',
     afterDraw(chart) {
-      if (!chart.crosshair || chart.crosshair.x === null) return;
+      if (!chart.ctx || !chart.chartArea || !chart.crosshair || chart.crosshair.x === null) return;
 
       const candleData = chart.data.datasets[0]?.data?.[chart.crosshair.snapIndex];
       if (!candleData) return;

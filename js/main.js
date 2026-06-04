@@ -1,39 +1,21 @@
 // js/main.js
 //Importa todo y hace el DOMContentLoaded (reemplaza el app.js original).
-import { APP_STORAGE_VERSION, DEFAULT_TRACKED_PAIRS, state } from './state.js';
 import { formatPrice, safeErrorMessage } from './utils.js';
+import { state } from './state.js';
 import { fetchCoinsList, fetchPriceBatch, fetch24hStatsBatch } from './exchange.js';
 import { renderTrackedPairs, addTrackedPair, renderCandlestick } from './pairs.js';
 import { renderSavedWallets, saveWallet, fetchAndRenderWallet, getSavedWallets } from './wallet.js';
 import { loadTx } from './transactions.js';
 import { CHART_THEME } from './chartAdvanced.js';
+import { clearAppStorage, migrateAppStorage, readTrackedPairs, STORAGE_KEYS, writeSavedWallets } from './storage.js';
 
 let appInitialized = false;
-
-function migrateLocalStorage() {
-  const versionKey = 'defiTrackerStorageVersion';
-  if (localStorage.getItem(versionKey) === APP_STORAGE_VERSION) return;
-
-  localStorage.removeItem('trackedPairs');
-  localStorage.removeItem('coinsListCache');
-
-  try {
-    const wallets = JSON.parse(localStorage.getItem('savedWallets') || '[]')
-      .filter(wallet => typeof wallet === 'string' && /^0x[a-fA-F0-9]{40}$/.test(wallet));
-    if (wallets.length) localStorage.setItem('savedWallets', JSON.stringify(wallets));
-    else localStorage.removeItem('savedWallets');
-  } catch {
-    localStorage.removeItem('savedWallets');
-  }
-
-  localStorage.setItem(versionKey, APP_STORAGE_VERSION);
-}
 
 async function initApp() {
   if (appInitialized) return;
   appInitialized = true;
 
-  migrateLocalStorage();
+  migrateAppStorage();
 
   // Suppress "User rejected the request" errors from external wallet extensions
   window.addEventListener('unhandledrejection', function (event) {
@@ -44,17 +26,7 @@ async function initApp() {
   });
 
   // Restaurar tracked pairs
-  const savedTrackedPairs = localStorage.getItem('trackedPairs');
-  if (savedTrackedPairs) {
-    try {
-      const parsed = JSON.parse(savedTrackedPairs);
-      state.tracked = Array.isArray(parsed) && parsed.length ? parsed : [...DEFAULT_TRACKED_PAIRS];
-    } catch {
-      state.tracked = [...DEFAULT_TRACKED_PAIRS];
-    }
-  } else {
-    localStorage.setItem('trackedPairs', JSON.stringify(state.tracked));
-  }
+  state.tracked = readTrackedPairs();
 
   // Chart.js defaults (si Chart está cargado)
   if (window.Chart && window.Chart.defaults && window.Chart.defaults.elements && window.Chart.defaults.elements.candlestick) {
@@ -160,11 +132,14 @@ async function initApp() {
 
   // Pair suggestions
   if (pairSearch && pairSuggestions) {
+    const pairLabel = coin => `${coin.base}/${coin.quote}`;
+    const pairSearchText = coin => `${coin.symbol} ${coin.base} ${coin.quote} ${pairLabel(coin)}`;
+
     const renderPairSuggestions = matches => {
       pairSuggestions.replaceChildren();
       if (matches.length === 0) {
         const empty = document.createElement('div');
-        empty.textContent = 'No se encontraron monedas.';
+        empty.textContent = 'No se encontraron pares.';
         pairSuggestions.appendChild(empty);
         return;
       }
@@ -173,7 +148,7 @@ async function initApp() {
       matches.forEach(coin => {
         const item = document.createElement('div');
         item.dataset.symbol = coin.symbol;
-        item.textContent = `${coin.base}/USDT`;
+        item.textContent = pairLabel(coin);
         fragment.appendChild(item);
       });
       pairSuggestions.appendChild(fragment);
@@ -182,7 +157,10 @@ async function initApp() {
     pairSearch.addEventListener('input', () => {
       const q = pairSearch.value.trim().toUpperCase();
       if (!q) { pairSuggestions.classList.remove('active'); return; }
-      const matches = (state.coinsList || []).filter(c => c.base.startsWith(q) || c.symbol.startsWith(q)).slice(0, 8);
+      const normalized = q.replace(/[^A-Z0-9]/g, '');
+      const matches = (state.coinsList || [])
+        .filter(c => pairSearchText(c).includes(q) || c.symbol.includes(normalized))
+        .slice(0, 10);
       renderPairSuggestions(matches);
       pairSuggestions.classList.add('active');
     });
@@ -213,12 +191,18 @@ async function initApp() {
         fetch24hStatsBatch(symbols)
       ]);
 
+      const pairQuote = symbol => state.coinsList?.find(item => item.symbol === symbol)?.quote || '';
+
       for (const symbol of symbols) {
         const price = prices[symbol];
         const stat = stats[symbol];
 
         const priceSpan = document.querySelector(`.pair-price[data-symbol="${symbol}"]`);
-        if (priceSpan && price) priceSpan.textContent = formatPrice(price);
+        if (priceSpan && price) {
+          const quote = pairQuote(symbol);
+          const formatted = formatPrice(price);
+          priceSpan.textContent = quote && formatted !== '-' ? `${formatted} ${quote}` : formatted;
+        }
 
         if (stat && stat.priceChangePercent !== undefined) {
           const pct = parseFloat(stat.priceChangePercent);
@@ -242,9 +226,21 @@ async function initApp() {
     const walletAddress = document.getElementById('walletAddress');
     if (walletAddress) {
       walletAddress.value = walletsOnLoad[walletsOnLoad.length - 1];
-      const btnFetchWallet = document.getElementById('btnFetchWallet');
-      if (btnFetchWallet) btnFetchWallet.click();
     }
+  }
+
+  const btnClearAppStorage = document.getElementById('btnClearAppStorage');
+  if (btnClearAppStorage) {
+    btnClearAppStorage.addEventListener('click', () => {
+      clearAppStorage();
+      state.tracked = readTrackedPairs();
+      renderSavedWallets();
+      renderTrackedPairs();
+      document.getElementById('walletAddress').value = '';
+      const walletData = document.getElementById('walletData');
+      if (walletData) walletData.replaceChildren();
+      localStorage.setItem(STORAGE_KEYS.walletAutoFetchDisabled, '1');
+    });
   }
 
   const btnSaveWallet = document.getElementById('btnSaveWallet');
@@ -280,7 +276,7 @@ async function initApp() {
       if (!address) return;
       let wallets = getSavedWallets();
       wallets = wallets.filter(w => w !== address);
-      localStorage.setItem('savedWallets', JSON.stringify(wallets));
+      writeSavedWallets(wallets);
       renderSavedWallets();
       document.getElementById('walletAddress').value = '';
       const walletData = document.getElementById('walletData');
