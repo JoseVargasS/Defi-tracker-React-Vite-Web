@@ -127,6 +127,21 @@ async function initApp() {
     });
   });
 
+  const measureToggle = document.getElementById('chart-measure-toggle');
+  if (measureToggle) {
+    measureToggle.classList.toggle('active', state.chartMeasure.active);
+    measureToggle.setAttribute('aria-pressed', String(state.chartMeasure.active));
+    measureToggle.addEventListener('click', () => {
+      state.chartMeasure.active = !state.chartMeasure.active;
+      state.chartMeasure.start = null;
+      state.chartMeasure.end = null;
+      state.chartMeasure.preview = null;
+      measureToggle.classList.toggle('active', state.chartMeasure.active);
+      measureToggle.setAttribute('aria-pressed', String(state.chartMeasure.active));
+      state.chartInstance?.update('none');
+    });
+  }
+
   // Fetch coins list
   fetchCoinsList();
 

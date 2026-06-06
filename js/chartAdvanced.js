@@ -85,6 +85,79 @@ export function calculateVolume(data) {
   }));
 }
 
+/**
+ * Builds a fixed-range volume profile for the supplied candles.
+ * Volume is distributed across each candle range so wide candles do not
+ * overstate a single price bucket.
+ */
+export function calculateVolumeProfile(data, rowCount = 48) {
+  const candles = (data || []).filter(item => (
+    Number.isFinite(item?.h) &&
+    Number.isFinite(item?.l) &&
+    Number.isFinite(item?.c) &&
+    Number.isFinite(item?.o)
+  ));
+
+  if (!candles.length) return { rows: [], poc: null, maxVolume: 0 };
+
+  const minPrice = Math.min(...candles.map(item => item.l));
+  const maxPrice = Math.max(...candles.map(item => item.h));
+  if (!Number.isFinite(minPrice) || !Number.isFinite(maxPrice) || minPrice === maxPrice) {
+    return { rows: [], poc: null, maxVolume: 0 };
+  }
+
+  const rowsTotal = Math.max(12, Math.min(96, Math.round(rowCount)));
+  const rowSize = (maxPrice - minPrice) / rowsTotal;
+  const rows = Array.from({ length: rowsTotal }, (_, index) => {
+    const low = minPrice + rowSize * index;
+    const high = low + rowSize;
+    return {
+      low,
+      high,
+      price: low + rowSize / 2,
+      up: 0,
+      down: 0,
+      total: 0
+    };
+  });
+
+  candles.forEach(candle => {
+    const rawVolume = Number.isFinite(candle.q) && candle.q > 0 ? candle.q : candle.v;
+    const volume = Number.isFinite(rawVolume) ? rawVolume : 0;
+    if (volume <= 0) return;
+
+    const candleLow = Math.max(minPrice, Math.min(candle.l, candle.h));
+    const candleHigh = Math.min(maxPrice, Math.max(candle.l, candle.h));
+    const isUp = candle.c >= candle.o;
+
+    if (candleHigh === candleLow) {
+      const index = Math.max(0, Math.min(rows.length - 1, Math.floor((candle.c - minPrice) / rowSize)));
+      rows[index][isUp ? 'up' : 'down'] += volume;
+      rows[index].total += volume;
+      return;
+    }
+
+    const firstRow = Math.max(0, Math.floor((candleLow - minPrice) / rowSize));
+    const lastRow = Math.min(rows.length - 1, Math.floor((candleHigh - minPrice) / rowSize));
+    const candleRange = candleHigh - candleLow;
+
+    for (let index = firstRow; index <= lastRow; index++) {
+      const row = rows[index];
+      const overlap = Math.max(0, Math.min(candleHigh, row.high) - Math.max(candleLow, row.low));
+      if (overlap <= 0) continue;
+
+      const rowVolume = volume * (overlap / candleRange);
+      row[isUp ? 'up' : 'down'] += rowVolume;
+      row.total += rowVolume;
+    }
+  });
+
+  const maxVolume = rows.reduce((max, row) => Math.max(max, row.total), 0);
+  const poc = rows.reduce((best, row) => row.total > (best?.total ?? 0) ? row : best, null);
+
+  return { rows, poc, maxVolume };
+}
+
 export function calculateBollingerBands(data, period = 20, multiplier = 2) {
   const bands = { upper: [], middle: [], lower: [] };
 

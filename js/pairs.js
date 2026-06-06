@@ -8,6 +8,7 @@ import {
   calculateBollingerBands,
   calculateStochRSI,
   calculateVolume,
+  calculateVolumeProfile,
   compactNumber,
   createAdvancedTooltipPlugin,
   normalizeKline
@@ -101,6 +102,50 @@ const lastDefined = items => {
 
 const formatIndicatorValue = value => Number.isFinite(value) ? value.toFixed(2) : '-';
 const isScaleVisible = scale => Boolean(scale) && scale.options?.display !== false;
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+const formatProfilePrice = value => {
+  if (!Number.isFinite(value)) return '-';
+  if (value >= 1000) return value.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  if (value >= 100) return value.toFixed(2);
+  if (value >= 1) return value.toFixed(4);
+  return value.toPrecision(4);
+};
+
+const formatMeasurePrice = value => {
+  if (!Number.isFinite(value)) return '-';
+  if (value >= 100) return value.toFixed(2);
+  if (value >= 1) return value.toFixed(4);
+  return value.toPrecision(4);
+};
+
+const getNearestCandlePoint = (chart, x, y) => {
+  const priceScale = chart?.scales?.price;
+  const xScale = chart?.scales?.x;
+  const candles = chart?.data?.datasets?.[0]?.data || [];
+  if (!priceScale || !xScale || !candles.length) return null;
+  if (y < priceScale.top || y > priceScale.bottom) return null;
+
+  let index = 0;
+  let xPixel = xScale.getPixelForValue(candles[0].x);
+  let minDistance = Math.abs(x - xPixel);
+
+  candles.forEach((candle, candleIndex) => {
+    const candleX = xScale.getPixelForValue(candle.x);
+    const distance = Math.abs(x - candleX);
+    if (distance < minDistance) {
+      index = candleIndex;
+      xPixel = candleX;
+      minDistance = distance;
+    }
+  });
+
+  return {
+    index,
+    x: candles[index].x,
+    y: priceScale.getValueForPixel(y)
+  };
+};
 
 function drawValueChip(ctx, chart, scale, value, color, y) {
   if (!Number.isFinite(value) || !scale) return;
@@ -370,7 +415,7 @@ const crosshairPlugin = {
       ctx.font = '12px Inter, sans-serif';
       const labelWidth = ctx.measureText(yLabel).width + 18;
       const labelHeight = 22;
-      const boxX = Math.max(chart.chartArea.left, chart.chartArea.right - labelWidth);
+      const boxX = chart.chartArea.right + 4;
       const boxY = Math.max(activeScale.top, Math.min(chart.crosshair.y - labelHeight / 2, activeScale.bottom - labelHeight));
 
       ctx.fillStyle = '#11151a';
@@ -552,6 +597,186 @@ const indicatorLegendPlugin = {
   }
 };
 
+const fixedRangeVolumeProfilePlugin = {
+  id: 'fixedRangeVolumeProfile',
+  beforeDatasetsDraw(chart) {
+    chart._volumeProfile = null;
+    if (!isIndicatorEnabled('volumeProfile') || !chart.ctx || !chart.chartArea) return;
+
+    const priceScale = chart.scales.price;
+    const candles = chart.data.datasets[0]?.data || [];
+    if (!isScaleVisible(priceScale) || candles.length < 2) return;
+
+    const settings = state.volumeProfile || {};
+    const profile = calculateVolumeProfile(candles, settings.rows ?? 48);
+    if (!profile.rows.length || !profile.poc || profile.maxVolume <= 0) return;
+
+    chart._volumeProfile = profile;
+
+    const ctx = chart.ctx;
+    const chartArea = chart.chartArea;
+    const profileWidth = clamp(
+      Math.round(chartArea.width * (settings.widthRatio ?? 0.28)),
+      settings.minWidth ?? 82,
+      settings.maxWidth ?? 220
+    );
+    const xRight = chartArea.right - 2;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(chartArea.left, priceScale.top, chartArea.width, priceScale.bottom - priceScale.top);
+    ctx.clip();
+
+    profile.rows.forEach(row => {
+      if (row.total <= 0) return;
+
+      const yTop = priceScale.getPixelForValue(row.high);
+      const yBottom = priceScale.getPixelForValue(row.low);
+      const y = Math.min(yTop, yBottom) + 1;
+      const height = Math.max(1, Math.abs(yBottom - yTop) - 1);
+      const width = Math.max(1, (row.total / profile.maxVolume) * profileWidth);
+      const x = xRight - width;
+      const upWidth = row.total > 0 ? width * (row.up / row.total) : 0;
+      const downWidth = width - upWidth;
+      const isPoc = row === profile.poc;
+
+      ctx.fillStyle = isPoc ? 'rgba(242, 201, 76, 0.28)' : 'rgba(236, 84, 125, 0.28)';
+      ctx.fillRect(x, y, downWidth, height);
+      ctx.fillStyle = isPoc ? 'rgba(242, 201, 76, 0.36)' : 'rgba(54, 211, 219, 0.32)';
+      ctx.fillRect(x + downWidth, y, upWidth, height);
+    });
+
+    const pocY = priceScale.getPixelForValue(profile.poc.price);
+    ctx.strokeStyle = 'rgba(242, 201, 76, 0.58)';
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.moveTo(chartArea.left, pocY);
+    ctx.lineTo(chartArea.right, pocY);
+    ctx.stroke();
+    ctx.restore();
+  },
+  afterDraw(chart) {
+    if (!isIndicatorEnabled('volumeProfile') || !chart.ctx || !chart.chartArea) return;
+
+    const profile = chart._volumeProfile;
+    const priceScale = chart.scales.price;
+    if (!profile?.poc || !isScaleVisible(priceScale)) return;
+
+    const ctx = chart.ctx;
+    const chartArea = chart.chartArea;
+    const label = `VP POC ${formatProfilePrice(profile.poc.price)} | ${compactNumber(profile.poc.total)}`;
+
+    ctx.save();
+    ctx.font = '400 11px Inter, sans-serif';
+    ctx.textBaseline = 'middle';
+    const labelWidth = Math.min(chartArea.width - 16, ctx.measureText(label).width + 18);
+    const labelHeight = 22;
+    const x = Math.max(chartArea.left + 8, chartArea.right - labelWidth - 8);
+    const y = priceScale.top + 9;
+
+    ctx.fillStyle = 'rgba(8, 10, 12, 0.78)';
+    ctx.strokeStyle = 'rgba(242, 201, 76, 0.38)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, labelWidth, labelHeight, 5);
+    else ctx.rect(x, y, labelWidth, labelHeight);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#f5f7fa';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, x + labelWidth / 2, y + labelHeight / 2, labelWidth - 12);
+    ctx.restore();
+  }
+};
+
+const measureRangePlugin = {
+  id: 'measureRange',
+  afterDraw(chart) {
+    if (!state.chartMeasure?.active || !chart.ctx || !chart.chartArea) return;
+
+    const measure = state.chartMeasure;
+    const start = measure.start;
+    const end = measure.end || measure.preview;
+    const priceScale = chart.scales.price;
+    const xScale = chart.scales.x;
+    const candles = chart.data.datasets[0]?.data || [];
+    if (!start || !priceScale || !xScale || !candles.length) return;
+
+    const ctx = chart.ctx;
+    const startX = xScale.getPixelForValue(start.x);
+    const startY = priceScale.getPixelForValue(start.y);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(chart.chartArea.left, priceScale.top, chart.chartArea.width, priceScale.bottom - priceScale.top);
+    ctx.clip();
+
+    if (!end) {
+      ctx.fillStyle = 'rgba(242, 201, 76, 0.92)';
+      ctx.beginPath();
+      ctx.arc(startX, startY, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    const endX = xScale.getPixelForValue(end.x);
+    const endY = priceScale.getPixelForValue(end.y);
+    const leftPoint = start.index <= end.index ? start : end;
+    const rightPoint = start.index <= end.index ? end : start;
+    const leftX = Math.min(startX, endX);
+    const rightX = Math.max(startX, endX);
+    const topY = Math.min(startY, endY);
+    const bottomY = Math.max(startY, endY);
+    const width = Math.max(1, rightX - leftX);
+    const height = Math.max(1, bottomY - topY);
+    const delta = rightPoint.y - leftPoint.y;
+    const percent = leftPoint.y ? (delta / leftPoint.y) * 100 : 0;
+    const isUp = delta >= 0;
+    const color = isUp ? CHART_THEME.up : CHART_THEME.down;
+    const fill = isUp ? 'rgba(0, 192, 135, 0.11)' : 'rgba(242, 54, 69, 0.11)';
+    const bars = Math.abs(rightPoint.index - leftPoint.index) + 1;
+    const label = `${percent >= 0 ? '+' : ''}${percent.toFixed(2)}% | ${delta >= 0 ? '+' : ''}${formatMeasurePrice(delta)} | ${bars} velas`;
+
+    ctx.fillStyle = fill;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([5, 4]);
+    ctx.fillRect(leftX, topY, width, height);
+    ctx.strokeRect(leftX, topY, width, height);
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle = 'rgba(245, 247, 250, 0.36)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(leftX, priceScale.top);
+    ctx.lineTo(leftX, priceScale.bottom);
+    ctx.moveTo(rightX, priceScale.top);
+    ctx.lineTo(rightX, priceScale.bottom);
+    ctx.stroke();
+
+    ctx.font = '400 11px Inter, sans-serif';
+    const labelWidth = Math.min(chart.chartArea.width - 16, ctx.measureText(label).width + 18);
+    const labelX = clamp(leftX + width / 2 - labelWidth / 2, chart.chartArea.left + 8, chart.chartArea.right - labelWidth - 8);
+    const labelY = clamp(topY - 28, priceScale.top + 8, priceScale.bottom - 30);
+
+    ctx.fillStyle = 'rgba(8, 10, 12, 0.86)';
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(labelX, labelY, labelWidth, 22, 5);
+    else ctx.rect(labelX, labelY, labelWidth, 22);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#f5f7fa';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, labelX + labelWidth / 2, labelY + 11, labelWidth - 12);
+    ctx.restore();
+  }
+};
+
 function createPairHtml(symbol, price, stats) {
   const { base, quote } = getPairMeta(symbol);
   const pairLabel = getPairLabel(symbol);
@@ -666,6 +891,12 @@ function destroyChart(canvas) {
     delete canvas._upHandler;
   }
 
+  if (state.chartMeasure) {
+    state.chartMeasure.start = null;
+    state.chartMeasure.end = null;
+    state.chartMeasure.preview = null;
+  }
+
   try {
     Chart.getChart(canvas)?.destroy();
   } catch (error) {
@@ -767,14 +998,21 @@ export async function renderCandlestick(symbol, interval) {
         animation: false,
         parsing: false,
         interaction: { mode: 'nearest', intersect: false },
-        layout: { padding: { right: 76, bottom: 28, left: 6, top: 56 } },
+        layout: { padding: { right: 98, bottom: 28, left: 6, top: 56 } },
         plugins: {
           legend: { display: false },
           tooltip: { enabled: false }
         },
         scales: createScales(interval)
       },
-      plugins: [crosshairPlugin, createAdvancedTooltipPlugin(), currentPricePlugin, indicatorLegendPlugin]
+      plugins: [
+        fixedRangeVolumeProfilePlugin,
+        measureRangePlugin,
+        crosshairPlugin,
+        createAdvancedTooltipPlugin(),
+        currentPricePlugin,
+        indicatorLegendPlugin
+      ]
     });
 
     Object.assign(state.chartInstance, {
@@ -810,13 +1048,46 @@ export async function renderCandlestick(symbol, interval) {
     let panStartX = 0;
     let panStartIndex = start;
 
+    const handleMeasureClick = event => {
+      const chart = state.chartInstance;
+      if (!state.chartMeasure?.active || !chart) return false;
+
+      const rect = canvas.getBoundingClientRect();
+      const point = getNearestCandlePoint(chart, event.clientX - rect.left, event.clientY - rect.top);
+      if (!point) return true;
+
+      if (!state.chartMeasure.start || state.chartMeasure.end) {
+        state.chartMeasure.start = point;
+        state.chartMeasure.end = null;
+        state.chartMeasure.preview = null;
+      } else {
+        state.chartMeasure.end = point;
+        state.chartMeasure.preview = null;
+      }
+
+      chart.update('none');
+      return true;
+    };
+
     canvas._downHandler = event => {
+      if (handleMeasureClick(event)) return;
+
       isPanning = true;
       panStartX = event.clientX;
       panStartIndex = start;
       canvas.setPointerCapture?.(event.pointerId);
     };
     canvas._moveHandler = event => {
+      if (state.chartMeasure?.active) {
+        const chart = state.chartInstance;
+        if (chart && state.chartMeasure.start && !state.chartMeasure.end) {
+          const rect = canvas.getBoundingClientRect();
+          state.chartMeasure.preview = getNearestCandlePoint(chart, event.clientX - rect.left, event.clientY - rect.top);
+          chart.update('none');
+        }
+        return;
+      }
+
       if (!isPanning) return;
       const sensitivity = state.chartView?.panSensitivity ?? 6;
       const moveBars = Math.round((event.clientX - panStartX) / sensitivity);

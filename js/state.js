@@ -24,7 +24,20 @@ export const state = {
   chartIndicators: {
     bollinger: true,
     volume: true,
-    stochRsi: true
+    stochRsi: true,
+    volumeProfile: true
+  },
+  volumeProfile: {
+    rows: 72,
+    widthRatio: 0.38,
+    minWidth: 130,
+    maxWidth: 320
+  },
+  chartMeasure: {
+    active: false,
+    start: null,
+    end: null,
+    preview: null
   },
   lastPrices: {},
   coinIcons: {},

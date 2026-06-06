@@ -410,6 +410,36 @@
   background: #060708;
 }
 
+.chart-tool-button {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  background: rgba(8, 10, 12, 0.86);
+  color: #9aa3ad;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.chart-tool-button:hover {
+  border-color: rgba(0, 192, 135, 0.48);
+  color: #f5f7fa;
+}
+
+.chart-tool-button.active {
+  background: rgba(0, 192, 135, 0.14);
+  border-color: rgba(0, 192, 135, 0.62);
+  color: #00c087;
+}
+
 #candlestick-chart {
   position: absolute;
   inset: 0;

@@ -86,10 +86,19 @@
               <div class="indicator-selector" aria-label="Indicadores tecnicos">
                 <button type="button" class="chart-indicator-toggle active" data-indicator="bollinger">BB</button>
                 <button type="button" class="chart-indicator-toggle active" data-indicator="volume">VOL</button>
+                <button type="button" class="chart-indicator-toggle active" data-indicator="volumeProfile">VP</button>
                 <button type="button" class="chart-indicator-toggle active" data-indicator="stochRsi">Stoch RSI</button>
               </div>
             </div>
             <div id="chart-wrapper">
+              <button
+                id="chart-measure-toggle"
+                type="button"
+                class="chart-tool-button"
+                title="Medir rango"
+                aria-label="Medir rango de precio"
+                aria-pressed="false"
+              >%</button>
               <canvas id="candlestick-chart"></canvas>
             </div>
           </div>
