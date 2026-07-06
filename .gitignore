@@ -4,6 +4,9 @@
 node_modules/
 dist/
 coverage/
+test-results/
 .opencode/
 .codegraph/
+images/
 *.tsbuildinfo
+skills-lock.json
