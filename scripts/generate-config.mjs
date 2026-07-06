@@ -3,7 +3,6 @@ import path from 'node:path';
 
 const root = process.cwd();
 const envPath = path.join(root, '.env');
-const outPath = path.join(root, 'js', 'config.local.js');
 const allowedKeys = [
   'BINANCE_API',
   'COINSTATS_API',
@@ -11,6 +10,13 @@ const allowedKeys = [
   'ETH_API',
   'ETH_KEY'
 ];
+const keyMap = {
+  BINANCE_API: 'VITE_BINANCE_API',
+  COINSTATS_API: 'VITE_COINSTATS_API',
+  COINSTATS_API_KEY: 'VITE_COINSTATS_API_KEY',
+  ETH_API: 'VITE_ETH_API',
+  ETH_KEY: 'VITE_ETH_KEY',
+};
 
 function parseEnv(source) {
   return source
@@ -18,12 +24,12 @@ function parseEnv(source) {
     .map(line => line.trim())
     .filter(line => line && !line.startsWith('#'))
     .reduce((acc, line) => {
-      const separatorIndex = line.indexOf('=');
-      if (separatorIndex === -1) return acc;
-
-      const key = line.slice(0, separatorIndex).trim();
-      const value = line.slice(separatorIndex + 1).trim().replace(/^["']|["']$/g, '');
-      if (allowedKeys.includes(key)) acc[key] = value;
+      const i = line.indexOf('=');
+      if (i === -1) return acc;
+      const key = line.slice(0, i).trim();
+      const bareKey = key.startsWith('VITE_') ? key.slice(5) : key;
+      const value = line.slice(i + 1).trim().replace(/^["']|["']$/g, '');
+      acc[bareKey] = value;
       return acc;
     }, {});
 }
@@ -37,12 +43,10 @@ const envConfig = allowedKeys.reduce((acc, key) => {
 }, {});
 const config = { ...fileConfig, ...envConfig };
 
-if (!config.COINSTATS_API_KEY || !config.ETH_KEY) {
-  console.error('Missing API keys. Provide .env locally or COINSTATS_API_KEY/ETH_KEY environment variables in CI.');
-  process.exit(1);
-}
+const lines = Object.entries(keyMap).map(([oldKey, viteKey]) => {
+  const value = config[oldKey];
+  return `${viteKey}=${value ?? ''}`;
+});
 
-const output = `globalThis.DEFI_TRACKER_CONFIG = ${JSON.stringify(config, null, 2)};\n`;
-
-fs.writeFileSync(outPath, output, 'utf8');
-console.log(`Generated ${path.relative(root, outPath)}`);
+fs.writeFileSync(envPath, lines.join('\n') + '\n', 'utf8');
+console.log(`Generated ${path.relative(root, envPath)}`);

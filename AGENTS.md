@@ -4,231 +4,164 @@ Guia para agentes que trabajen en este repositorio.
 
 ## Objetivo del proyecto
 
-Este repo es una app web estatica llamada **DeFi & Crypto Terminal**. Sirve para:
-
-- consultar balances de wallets,
+App React + Vite + TypeScript llamada **DeFi & Crypto Terminal**. Sirve para:
+- consultar balances de wallets EVM,
 - listar transacciones Ethereum/Base,
 - seguir pares Binance `*/USDT`,
 - visualizar velas con indicadores tecnicos.
 
-No hay backend local ni bundler. Todo corre en navegador con HTML, CSS y JavaScript ES Modules.
+## Stack
+
+- React 19 + TypeScript 5.8 + Vite 6
+- Chart.js + chartjs-chart-financial + chartjs-adapter-date-fns
+- Zustand para estado global
+- Vitest para tests unitarios
+- Playwright para E2E
+- APIs: Binance Spot, Etherscan v2, CoinStats Open API
 
 ## Comandos utiles
 
-Ejecutar desde la raiz del repo:
-
 ```powershell
-node --check js/main.js
-node --check js/pairs.js
-node --check js/chartAdvanced.js
-node --check js/exchange.js
-node --check js/wallet.js
-node --check js/transactions.js
-node --check js/prices.js
+npm run dev          # servidor dev Vite
+npm run build        # tsc -b && vite build
+npm run lint         # eslint src/
+npm run typecheck    # tsc --noEmit
+npm test             # vitest run
+npm run test:e2e     # playwright test
+npm run preview      # vite preview
 ```
-
-Servidor local recomendado:
-
-```powershell
-python -m http.server 8000
-```
-
-Si Python no esta disponible, usar un servidor estatico simple con Node.
 
 ## Mapa de archivos
 
 ```text
-index.html                UI base y scripts CDN
-styles.css                Importa todos los CSS
-styles/general.css        Layout global, fuente, header, grid principal
-styles/forms.css          Inputs, botones, sugerencias
-styles/wallet.css         Panel wallet y balances
-styles/crypto.css         Watchlist, panel de mercado, chart
-styles/transactions.css   Tablas/listas de transacciones
-styles/responsive.css     Breakpoints
-js/bootstrap.js           Carga config local opcional antes de la app
-js/main.js                Arranque DOM, listeners, polling
-js/state.js               Estado compartido y caches
-js/config.js              Endpoints publicos y lectura de config local
-js/config.local.js        Generado desde .env, ignorado por git
-scripts/generate-config.mjs Genera js/config.local.js
-.github/workflows/deploy-pages.yml Genera config y publica GitHub Pages
-js/utils.js               Fetch wrapper y formateo basico
-js/exchange.js            Binance prices/stats/klines/exchangeInfo
-js/pairs.js               Watchlist y render Chart.js
-js/chartAdvanced.js       Indicadores y tooltip OHLC
-js/wallet.js              Wallet guardada, balances, dashboard
-js/transactions.js        Fetch/render transacciones
-js/prices.js              Precios actuales e historicos
+src/
+├── main.tsx                    Entry point React
+├── App.tsx                     Layout principal, polling, Chart.js register
+├── vite-env.d.ts               Tipos ImportMetaEnv
+├── api/
+│   ├── client.ts               makeRequest con retry y redact
+│   ├── binance.ts              Precios, klines, exchangeInfo
+│   ├── coinstats.ts            Balances y transacciones CoinStats
+│   ├── etherscan.ts            Transacciones y balances ETH
+│   └── prices.ts               Precio actual e historico USD
+├── components/
+│   ├── layout/Header.tsx
+│   ├── layout/Footer.tsx
+│   ├── market/PairSearch.tsx   Buscador de pares Binance
+│   ├── market/TrackedPairs.tsx Watchlist con polling
+│   ├── market/CandlestickChart.tsx  Velas, zoom/pan, indicadores
+│   ├── wallet/WalletSection.tsx     Input, fetch, render dashboard
+│   ├── wallet/WalletDashboard.tsx   Totales y agrupacion por chain
+│   ├── wallet/ChainCard.tsx         Tabla de assets por red
+│   ├── wallet/ZeroValueToggle.tsx   Toggle tokens sin valor
+│   ├── transactions/TransactionSection.tsx  Fetch ETH + Base
+│   └── transactions/TransactionTable.tsx    Tabla con USD/P&L
+├── lib/
+│   ├── config.ts               Endpoints, chains, defaults
+│   ├── utils.ts                formatPrice, escapeHTML, safeImageUrl, etc
+│   ├── storage.ts              localStorage helpers
+│   └── chart/
+│       ├── normalize.ts        normalizeKline, compactNumber
+│       ├── indicators.ts       Bollinger, StochRSI, Volume, RSI, VP
+│       └── plugins/index.ts    Crosshair, currentPrice, legend, VRVP, measure
+├── store/
+│   ├── useMarketStore.ts       Zustand: pares, chart, precios
+│   ├── useWalletStore.ts       Zustand: wallet, assets, chains
+│   └── useTransactionStore.ts  Zustand: txs ETH/Base
+├── styles/
+│   ├── index.css               @import de todos los CSS
+│   ├── general.css             Layout global, header, grid
+│   ├── forms.css               Inputs, botones, sugerencias
+│   ├── wallet.css              Panel wallet y balances
+│   ├── crypto.css              Watchlist, mercado, chart
+│   ├── transactions.css        Tablas de transacciones
+│   └── responsive.css          Breakpoints
+└── __tests__/unit/             Tests Vitest (utils, storage, normalize, indicators)
 ```
 
 ## Reglas de edicion
 
-- Usar ASCII en archivos nuevos o reemplazados, salvo que el archivo ya requiera otra codificacion.
-- Mantener ES Modules: `import`/`export`.
-- No introducir framework ni bundler sin una razon clara.
+- TypeScript estricto, evitar `as any`.
+- Usar Zustand stores para estado global (`useMarketStore`, `useWalletStore`, `useTransactionStore`).
+- Indicadores tecnicos en `lib/chart/indicators.ts`; plugins en `lib/chart/plugins/`.
 - No dejar codigo muerto comentado.
-- No revertir cambios no relacionados.
-- Usar `apply_patch` para ediciones manuales.
-- Si cambias UI, revisar `styles/responsive.css`.
-- Si cambias la grafica, revisar `pairs.js`, `chartAdvanced.js` y `state.js` juntos.
+- UI en CSS modules/classes, no inline styles.
+- Colores en variables/tokens de `CHART_THEME` (indicators.ts) o CSS.
+- Iconos externos deben tener fallback.
+- Validar URLs externas con `safeImageUrl()`.
+- No loguear URLs con `apikey`, headers ni respuestas completas.
+- Tests con Vitest: `npm test`.
 
 ## Grafica de velas
 
-La grafica esta en `js/pairs.js`.
+`src/components/market/CandlestickChart.tsx`:
 
-Funciones/piezas clave:
+- `buildTechnicalSeries(data)` -> calcula indicadores
+- `buildDatasets(symbol, candles, series, indicators)` -> datasets Chart.js
+- `createScales(interval, indicators)` -> escalas con paneles
+- `crosshairPlugin`, `currentPricePlugin`, `indicatorLegendPlugin` en `lib/chart/plugins/`
+- `fixedRangeVolumeProfilePlugin`, `measureRangePlugin`
 
-- `buildTechnicalSeries(data)`: calcula Bollinger, volumen y Stoch RSI.
-- `buildDatasets(symbol, candles, series)`: crea datasets Chart.js.
-- `createScales(interval)`: define escalas/paneles.
-- `renderCandlestick(symbol, interval)`: fetch, normaliza, renderiza y registra zoom/pan.
-- `crosshairPlugin`: crosshair y etiquetas de eje.
-- `currentPricePlugin`: etiqueta de precio actual en margen derecho.
-- `indicatorLegendPlugin`: datos visibles de volumen y Stoch RSI.
+Calculos en `src/lib/chart/indicators.ts`:
 
-Calculos en `js/chartAdvanced.js`:
-
-- `normalizeKline(kline)`
-- `calculateVolume(data)`
-- `calculateBollingerBands(data)`
-- `calculateStochRSI(data)`
-- `createAdvancedTooltipPlugin()`
-
-### Reglas visuales obligatorias
-
-- La barra OHLC no debe tapar velas.
-- La etiqueta de precio actual debe estar fuera del area de velas, en el margen derecho.
-- Los tags de indicadores deben estar en el margen derecho.
-- Tags de indicadores no deben sobreponerse entre si.
-- Valores y numeros deben usar `Inter`, peso normal cuando sea solicitado, y numeros legibles.
-- Evitar padding derecho excesivo: solo reservar lo necesario para labels/tags.
+- `normalizeKline(kline)`, `compactNumber(value)` en `normalize.ts`
+- `calculateVolume`, `calculateBollingerBands`, `calculateStochRSI`, `calculateRSI`, `calculateVolumeProfile`
 
 ## Transacciones
 
-`js/transactions.js` esta optimizado para no cargar fila por fila de forma lenta:
+`src/components/transactions/TransactionSection.tsx`:
 
-- usar `TX_PAGE_SIZE`,
-- usar `PRICE_CONCURRENCY`,
-- usar `mapWithConcurrency()`,
-- reutilizar caches de `prices.js`,
-- evitar delays artificiales,
-- renderizar filas antes de esperar precios historicos,
-- hidratar USD/P&L en segundo plano.
-
-No reintroducir esperas largas como `await delay(4000)` para transacciones.
-
-Ethereum:
-
-- `tokentx` y `txlist` se piden con `Promise.allSettled`.
-- Las transacciones nativas ETH se normalizan al estilo token.
-- Se deduplica antes de ordenar.
-
-Base:
-
-- Primero intenta GET.
-- Si CoinStats responde `409`, dispara PATCH de sync y reintenta.
+- `TX_PAGE_SIZE = 10`
+- Etherscan: `tokentx` + `txlist` en paralelo, dedup por hash+symbol+value
+- Base: CoinStats GET -> si 409, PATCH sync + retry
+- `TransactionTable.tsx`: renderiza filas, hidrata USD/P&L en segundo plano
 
 ## Precios
 
-`js/prices.js` usa caches en `state`:
+`src/api/prices.ts`:
 
-- `pricesCache`
-- `historicalChartCache`
-- `coinLookupCache`
-- `loadingRequests`
-
-Si se cambia `getHistoricalTokenPriceUSD`, debe retornar explicitamente el precio historico o `null`.
+- Caches en `useMarketStore`: `pricesCache`, `historicalChartCache`, `coinLookupCache`
+- `getTokenPriceUSD`, `getHistoricalTokenPriceUSD` retornan `number | null`
 
 ## Estado
 
-Preferir agregar estado compartido en `js/state.js`.
+Zustand stores en `src/store/`:
 
-Campos importantes:
-
-- `tracked`
-- `DEFAULT_TRACKED_PAIRS`
-- `APP_STORAGE_VERSION`
-- `chartInstance`
-- `currentPair`
-- `currentInterval`
-- `chartZoom`
-- `chartView`
-- `chartIndicators`
-- caches de precio/historico
+- `useMarketStore`: `tracked`, `currentPair`, `currentInterval`, `chartZoom`, `chartIndicators`, `chartsCache`
+- `useWalletStore`: `address`, `savedWallets`, `assets`, `totalWorth`
+- `useTransactionStore`: `ethTxs`, `baseTxs`, paginacion
 
 ## CSS
 
-La UI actual busca una estetica compacta tipo exchange.
-
-- `styles/crypto.css` contiene la mayoria de la UI de mercado.
-- Evitar cards anidadas innecesarias.
-- Mantener border radius bajo, usualmente `6px` a `8px`.
-- No usar gradientes decorativos grandes.
-- Mantener densidad alta y buena legibilidad.
-- Revisar mobile en `styles/responsive.css`.
+- `src/styles/crypto.css` -> mayoria UI de mercado
+- `src/styles/wallet.css` -> panel wallet y dashboard
+- border radius: `6px` a `8px`
+- Sin gradientes decorativos grandes
+- Revisar `responsive.css` para mobile
 
 ## APIs y seguridad
 
-`js/config.js` no debe contener API keys. Las keys viven en `.env`, que esta ignorado por git, y se inyectan al navegador generando `js/config.local.js`.
-
-Flujo local:
-
-```powershell
-copy .env.example .env
-node scripts/generate-config.mjs
-```
-
-No commitear:
-
-- `.env`
-- `.env.*`
-- `js/config.local.js`
-
-Si se prepara deploy real:
-
-- mover llamadas con keys a proxy/serverless,
-- para GitHub Pages estatico, generar `js/config.local.js` en el workflow desde repository secrets,
-- no commitear `js/config.local.js`,
-- actualizar README.
-
-Reglas de seguridad en codigo:
-
-- no insertar datos externos en `innerHTML` sin `escapeHTML()`,
-- validar URLs de iconos con `safeImageUrl()`,
-- mostrar errores con `safeErrorMessage()`,
-- no loguear URLs con `apikey`, headers, payloads completos ni respuestas completas de APIs,
-- mantener la CSP de `index.html` sincronizada si se agregan nuevos dominios,
-- la CSP permite `unsafe-inline` en `script-src` por compatibilidad con extensiones de wallet; no agregar scripts inline propios,
-- mantener `index.html` apuntando a `js/bootstrap.js`, no directo a `main.js`, para respetar la carga previa de config,
-- preferir `replaceChildren()`, `textContent` y nodos DOM para UI con datos no confiables.
+- Keys en `.env`, se inyectan via `import.meta.env`
+- `src/lib/config.ts` lee defaults y overrides de env
+- `makeRequest` en `src/api/client.ts`: redacta `apikey` en logs
+- CSP en `index.html` (actualizar si se agregan dominios)
+- `unsafe-inline` en script-src solo por compatibilidad con wallets
+- No insertar datos externos en `innerHTML` sin `escapeHTML()`
+- Preferir `textContent` y nodos DOM
 
 ## Verificacion antes de finalizar
 
-Minimo:
-
 ```powershell
-node scripts/generate-config.mjs
-node --check js/main.js
-node --check js/pairs.js
-node --check js/chartAdvanced.js
-node --check js/exchange.js
-node --check js/wallet.js
-node --check js/transactions.js
-node --check js/prices.js
+npm run lint
+npm run typecheck
+npm test
+npm run build
 ```
 
 Si se toca grafica:
-
-- abrir un par,
-- mover mouse por la grafica,
-- comprobar que OHLC, precio actual y tags de indicadores no tapen velas/lineas,
-- probar toggles,
-- probar zoom/pan.
+- abrir un par, mover mouse, comprobar OHLC + precio actual + tags
+- probar toggles, zoom/pan
 
 Si se toca transacciones:
-
-- probar wallet con actividad Ethereum,
-- probar wallet con Base si hay datos,
-- revisar que el primer render no quede bloqueado por precios historicos lentos,
-- confirmar que los placeholders de USD/P&L se actualizan sin duplicar filas.
+- probar wallet con actividad Ethereum y Base
+- confirmar USD/P&L se actualizan sin duplicar filas

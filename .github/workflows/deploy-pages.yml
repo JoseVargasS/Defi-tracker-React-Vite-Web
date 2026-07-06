@@ -1,10 +1,8 @@
-name: Deploy GitHub Pages
+name: Deploy to GitHub Pages
 
 on:
   push:
-    branches:
-      - main
-      - master
+    branches: [main, master]
   workflow_dispatch:
 
 permissions:
@@ -17,38 +15,61 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  lint:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
 
-      - name: Generate runtime config
-        run: node scripts/generate-config.mjs
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:coverage
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
         env:
-          BINANCE_API: https://api.binance.com/api/v3
-          COINSTATS_API: https://openapiv1.coinstats.app
-          COINSTATS_API_KEY: ${{ secrets.COINSTATS_API_KEY }}
-          ETH_API: https://api.etherscan.io/v2/api
-          ETH_KEY: ${{ secrets.ETH_KEY }}
-
-      - name: Build static artifact
-        run: |
-          mkdir dist
-          cp index.html styles.css favicon.ico dist/
-          cp -R js styles images dist/
-
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
+          VITE_BINANCE_API: https://api.binance.com/api/v3
+          VITE_COINSTATS_API: https://openapiv1.coinstats.app
+          VITE_COINSTATS_API_KEY: ${{ secrets.COINSTATS_API_KEY }}
+          VITE_ETH_API: https://api.etherscan.io/v2/api
+          VITE_ETH_KEY: ${{ secrets.ETH_KEY }}
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
