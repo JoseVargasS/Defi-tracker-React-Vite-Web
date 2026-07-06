@@ -93,16 +93,19 @@ export default function App() {
       document.title = baseTitle;
       return;
     }
+    const knownQuotes = ['USDT', 'USDC', 'FDUSD', 'BTC', 'ETH', 'BNB', 'TRY', 'EUR', 'BRL', 'DAI'];
+    const quote = knownQuotes.find((q) => currentPair.endsWith(q));
+    const base = quote ? currentPair.slice(0, -quote.length) : currentPair;
     const price = lastPrices[currentPair];
     const pct = stats24h ? parseFloat(stats24h.priceChangePercent) : NaN;
     if (price == null || !Number.isFinite(price)) {
-      document.title = `${currentPair} | ${baseTitle}`;
+      document.title = `${base} | ${baseTitle}`;
       return;
     }
     const arrow = Number.isFinite(pct) ? (pct >= 0 ? '\u25B2' : '\u25BC') : '';
     const sign = Number.isFinite(pct) ? (pct >= 0 ? '+' : '') : '';
     const pctText = Number.isFinite(pct) ? `${sign}${pct.toFixed(2)}%` : '';
-    document.title = `${currentPair} ${formatPrice(price)}${arrow ? ' ' + arrow : ''}${pctText ? ' ' + pctText : ''}`;
+    document.title = `${base} ${formatPrice(price)}${arrow ? ' ' + arrow : ''}${pctText ? ' ' + pctText : ''}`;
   }, [currentPair, lastPrices, stats24h]);
 
   useEffect(() => {
