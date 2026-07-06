@@ -2,6 +2,7 @@ import type { Chart, Point } from 'chart.js';
 import type { BubbleDataPoint, FinancialDataPoint } from 'chart.js';
 import { CHART_THEME } from '@/lib/chart/indicators';
 import { compactNumber, type Candle } from '@/lib/chart/normalize';
+import type { EnhancedChart, ScaleLike, ChartDatasetLike, VPRow, CrosshairState } from '@/lib/chart/types';
 
 type ChartPoint = { x: number; y?: number | null; q?: number };
 const asPoints = (data: (number | Point | [number, number] | BubbleDataPoint | FinancialDataPoint | null)[]): ChartPoint[] =>
@@ -24,19 +25,19 @@ const lastDefined = (items: { y?: number | null }[]) => {
 const formatIndicatorValue = (value: number | null | undefined) =>
   Number.isFinite(value) ? (value as number).toFixed(2) : '-';
 
-const isScaleVisible = (scale: any) =>
-  Boolean(scale) && scale.options?.display !== false;
+const isScaleVisible = (scale: ScaleLike | undefined) =>
+  scale != null && scale.options?.display !== false;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 
-const getActiveYScale = (chart: any, yPosition: number) => {
+const getActiveYScale = (chart: EnhancedChart, yPosition: number) => {
   const scales = ['price', 'volume', 'stochRsi']
     .map((id) => chart.scales?.[id])
-    .filter(Boolean);
+    .filter(Boolean) as ScaleLike[];
   return (
     scales.find(
-      (scale: any) => yPosition >= scale.top && yPosition <= scale.bottom,
+      (scale) => yPosition >= scale.top && yPosition <= scale.bottom,
     ) || chart.scales?.price
   );
 };
@@ -49,9 +50,10 @@ const formatScaleValue = (scaleId: string, value: number) => {
 };
 
 const getSeparatedChipPositions = (
-  scale: any,
+  scale: ScaleLike | undefined,
   values: { key: string; value: number | null | undefined; color: string }[],
 ) => {
+  if (!scale) return [];
   const chipHeight = 22;
   const gap = 5;
   const minY = scale.top + 4;
@@ -61,7 +63,7 @@ const getSeparatedChipPositions = (
     .map((v) => ({
       ...v,
       y: clamp(
-        scale.getPixelForValue(v.value) - chipHeight / 2,
+        (scale as ScaleLike).getPixelForValue(v.value as number)! - chipHeight / 2,
         minY,
         maxY,
       ),
@@ -83,8 +85,8 @@ const getSeparatedChipPositions = (
 
 const drawValueChip = (
   ctx: CanvasRenderingContext2D,
-  chart: any,
-  scale: any,
+  chart: EnhancedChart,
+  scale: ScaleLike | undefined,
   value: number | null | undefined,
   color: string,
   y: number,
@@ -114,8 +116,8 @@ export const crosshairPlugin = {
   id: 'crosshair',
   afterInit(chart: Chart) {
     if (!chart.canvas) return;
-    const chartAny = chart as any;
-    chartAny.crosshair = { x: null, y: null, snapIndex: null };
+    const chartAny = chart as unknown as EnhancedChart;
+    chartAny.crosshair = { x: null, y: null, snapIndex: null, moveListener: null, leaveListener: null, canvas: null };
     const canvas = chart.canvas;
 
     const moveListener = (event: MouseEvent) => {
@@ -127,8 +129,9 @@ export const crosshairPlugin = {
       let snapIndex: number | null = null;
       let snapX = mouseX;
       let minDist = Infinity;
-      c.data.datasets[0]?.data?.forEach((item: any, index: number) => {
-        const xPixel = chart.scales.x?.getPixelForValue(item.x);
+      c.data.datasets[0]?.data?.forEach((item, index) => {
+        const pt = item as unknown as { x: number };
+        const xPixel = chart.scales.x?.getPixelForValue(pt.x);
         if (xPixel == null) return;
         const distance = Math.abs(mouseX - xPixel);
         if (distance < minDist) {
@@ -137,13 +140,15 @@ export const crosshairPlugin = {
           snapX = xPixel;
         }
       });
-      c.crosshair = { x: snapX, y: mouseY, snapIndex };
+      c.crosshair.x = snapX;
+      c.crosshair.y = mouseY;
+      c.crosshair.snapIndex = snapIndex;
       chart.draw();
     };
 
     const leaveListener = () => {
       if (!canvas || !chart.ctx) return;
-      chartAny.crosshair = { x: null, y: null, snapIndex: null };
+    chartAny.crosshair = { x: null, y: null, snapIndex: null, moveListener: null, leaveListener: null, canvas: null };
       chart.draw();
     };
 
@@ -154,7 +159,7 @@ export const crosshairPlugin = {
     chartAny.crosshair.canvas = canvas;
   },
   beforeDestroy(chart: Chart) {
-    const chartAny = chart as any;
+    const chartAny = chart as unknown as EnhancedChart;
     const crosshair = chartAny?.crosshair;
     const canvas = crosshair?.canvas || chart.canvas;
     if (!canvas || !crosshair) return;
@@ -162,10 +167,10 @@ export const crosshairPlugin = {
       canvas.removeEventListener('mousemove', crosshair.moveListener);
     if (crosshair.leaveListener)
       canvas.removeEventListener('mouseleave', crosshair.leaveListener);
-    chartAny.crosshair = null;
+    chartAny.crosshair = null as unknown as CrosshairState;
   },
   afterDraw(chart: Chart) {
-    const chartAny = chart as any;
+    const chartAny = chart as unknown as EnhancedChart;
     if (
       !chart.ctx ||
       !chart.chartArea ||
@@ -175,7 +180,7 @@ export const crosshairPlugin = {
       return;
 
     const ctx = chart.ctx;
-    const activeScale = getActiveYScale(chartAny, chartAny.crosshair.y);
+    const activeScale = getActiveYScale(chartAny, chartAny.crosshair.y!);
 
     ctx.save();
     ctx.strokeStyle = 'rgba(174, 180, 189, 0.55)';
@@ -186,20 +191,20 @@ export const crosshairPlugin = {
     ctx.lineTo(chartAny.crosshair.x, chart.chartArea.bottom);
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(chart.chartArea.left, chartAny.crosshair.y);
-    ctx.lineTo(chart.chartArea.right, chartAny.crosshair.y);
+    ctx.moveTo(chart.chartArea.left, chartAny.crosshair.y!);
+    ctx.lineTo(chart.chartArea.right, chartAny.crosshair.y!);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    const yValue = activeScale?.getValueForPixel(chartAny.crosshair.y);
-    const yLabel = formatScaleValue(activeScale?.id, yValue);
+    const yValue = activeScale!.getValueForPixel!(chartAny.crosshair.y!);
+    const yLabel = formatScaleValue(activeScale!.id!, yValue!);
     if (yLabel) {
       ctx.font = '12px Inter, sans-serif';
       const labelWidth = ctx.measureText(yLabel).width + 18;
       const labelHeight = 22;
       const boxX = chart.chartArea.right + 4;
       const boxY = clamp(
-        chartAny.crosshair.y - labelHeight / 2,
+        chartAny.crosshair.y! - labelHeight / 2,
         activeScale?.top ?? 0,
         (activeScale?.bottom ?? 0) - labelHeight,
       );
@@ -218,7 +223,7 @@ export const crosshairPlugin = {
     }
 
     const snapData = chart.data.datasets[0]?.data;
-    const snapPoint = snapData ? asPoints(snapData)[chartAny.crosshair.snapIndex] : null;
+    const snapPoint = snapData ? asPoints(snapData)[chartAny.crosshair.snapIndex!] : null;
     const xValue = snapPoint?.x;
     if (xValue) {
       const date = new Date(xValue);
@@ -263,22 +268,22 @@ export const currentPricePlugin = {
   id: 'currentPrice',
   afterDraw(chart: Chart) {
     if (!chart.ctx || !chart.chartArea) return;
-    const chartAny = chart as any;
+    const chartAny = chart as unknown as EnhancedChart;
     const priceScale = chart.scales?.price;
     const candles = chart.data.datasets[0]?.data;
     if (!priceScale || !candles?.length) return;
 
-    const lastCandle = candles[candles.length - 1] as any;
+    const lastCandle = candles[candles.length - 1] as unknown as { c: number; o: number };
     const yValue = Number.isFinite(chartAny._pairPrice)
       ? chartAny._pairPrice
       : lastCandle?.c;
-    const yPixel = priceScale.getPixelForValue(yValue);
+    const yPixel = priceScale.getPixelForValue(yValue as number);
     if (yPixel < priceScale.top || yPixel > priceScale.bottom) return;
 
     const isUp = lastCandle?.c >= lastCandle?.o;
     const color = isUp ? CHART_THEME.up : CHART_THEME.down;
     const label =
-      yValue >= 100 ? yValue.toFixed(2) : yValue.toFixed(4);
+      yValue! >= 100 ? yValue!.toFixed(2) : yValue!.toFixed(4);
     const ctx = chart.ctx;
 
     ctx.save();
@@ -326,7 +331,7 @@ export const indicatorLegendPlugin = {
   id: 'indicatorLegend',
   afterDraw(chart: Chart) {
     if (!chart.ctx || !chart.chartArea) return;
-    const chartAny = chart as any;
+    const chartAny = chart as unknown as EnhancedChart;
     const fallbackIndex =
       Math.max(0, (chart.data.datasets[0]?.data?.length ?? 0) - 1);
     const index = chartAny.crosshair?.snapIndex ?? fallbackIndex;
@@ -338,10 +343,12 @@ export const indicatorLegendPlugin = {
     ctx.font = '700 11px Inter, sans-serif';
     ctx.textBaseline = 'top';
 
-    if (isScaleVisible(volumeScale)) {
+    if (isScaleVisible(volumeScale as unknown as ScaleLike)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = chart.data.datasets as any[];
       const volumeData =
-        chart.data.datasets.find(
-          (ds: any) => ds.label === 'Volume',
+        data.find(
+      d => d.label === 'Volume',
         )?.data || [];
       const vPoints = asPoints(volumeData);
       const volumePoint = vPoints[index] || lastDefined(vPoints);
@@ -368,14 +375,16 @@ export const indicatorLegendPlugin = {
       ctx.fillText(compactNumber(quoteVol), x, y);
     }
 
-    if (isScaleVisible(stochScale)) {
+    if (isScaleVisible(stochScale as unknown as ScaleLike)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = chart.data.datasets as any[];
       const kData =
-        chart.data.datasets.find(
-          (ds: any) => ds.label === 'Stoch RSI %K',
+        data.find(
+      d => d.label === 'Stoch RSI %K',
         )?.data || [];
       const dData =
-        chart.data.datasets.find(
-          (ds: any) => ds.label === 'Stoch RSI %D',
+        data.find(
+      d => d.label === 'Stoch RSI %D',
         )?.data || [];
       const kPoints = asPoints(kData);
       const dPoints = asPoints(dData);
@@ -399,7 +408,7 @@ export const indicatorLegendPlugin = {
       ctx.fillStyle = CHART_THEME.stochD;
       ctx.fillText(formatIndicatorValue(dPoint?.y), x, y);
 
-      getSeparatedChipPositions(stochScale, [
+      getSeparatedChipPositions(stochScale as unknown as ScaleLike, [
         {
           key: 'k',
           value: kPoint?.y,
@@ -411,19 +420,21 @@ export const indicatorLegendPlugin = {
           color: CHART_THEME.stochD,
         },
       ]).forEach((chip) => {
-        drawValueChip(ctx, chartAny, stochScale, chip.value, chip.color, chip.y);
+        drawValueChip(ctx, chartAny, stochScale as unknown as ScaleLike, chip.value, chip.color, chip.y);
       });
     }
 
-    const dsList = chart.data.datasets as any[];
-    const smaDs = dsList.find((d: any) => d.label?.startsWith('SMA '));
-    const emaDs = dsList.find((d: any) => d.label?.startsWith('EMA '));
+    const dsList = chart.data.datasets as ChartDatasetLike[];
+    const smaDs = dsList.find((d: ChartDatasetLike) => d.label?.startsWith('SMA '));
+    const emaDs = dsList.find((d: ChartDatasetLike) => d.label?.startsWith('EMA '));
 
     if (smaDs || emaDs) {
       const x = chart.chartArea.left + 10;
       let y = chart.chartArea.top + 40;
-      const priceSmaData = smaDs ? asPoints(smaDs.data) : [];
-      const priceEmaData = emaDs ? asPoints(emaDs.data) : [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const priceSmaData = smaDs ? asPoints(smaDs.data as any) : [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const priceEmaData = emaDs ? asPoints(emaDs.data as any) : [];
       const smaPoint = priceSmaData[index] || lastDefined(priceSmaData);
       const emaPoint = priceEmaData[index] || lastDefined(priceEmaData);
 
@@ -452,7 +463,7 @@ export const indicatorLegendPlugin = {
 export const fixedRangeVolumeProfilePlugin = {
   id: 'fixedRangeVolumeProfile',
   beforeDatasetsDraw(chart: Chart) {
-    const chartAny = chart as any;
+    const chartAny = chart as unknown as EnhancedChart;
     chartAny._volumeProfile = null;
     const indicators = chartAny._indicators || {};
     if (
@@ -464,7 +475,7 @@ export const fixedRangeVolumeProfilePlugin = {
 
     const priceScale = chart.scales?.price;
     const rawCandles = chart.data.datasets[0]?.data || [];
-    if (!isScaleVisible(priceScale) || rawCandles.length < 2) return;
+    if (!isScaleVisible(priceScale as unknown as ScaleLike) || rawCandles.length < 2) return;
 
     const settings = chartAny._volumeProfileSettings || {};
     const profile = calculateVolumeProfile(
@@ -498,7 +509,7 @@ export const fixedRangeVolumeProfilePlugin = {
     );
     ctx.clip();
 
-    profile.rows.forEach((row: any) => {
+    profile.rows.forEach((row: VPRow) => {
       if (row.total <= 0) return;
       const yTop = priceScale.getPixelForValue(row.high);
       const yBottom = priceScale.getPixelForValue(row.low);
@@ -535,7 +546,7 @@ export const fixedRangeVolumeProfilePlugin = {
     ctx.restore();
   },
   afterDraw(chart: Chart) {
-    const chartAny = chart as any;
+    const chartAny = chart as unknown as EnhancedChart;
     const indicators = chartAny._indicators || {};
     if (
       indicators.volumeProfile === false ||
@@ -546,7 +557,7 @@ export const fixedRangeVolumeProfilePlugin = {
 
     const profile = chartAny._volumeProfile;
     const priceScale = chart.scales?.price;
-    if (!profile?.poc || !isScaleVisible(priceScale)) return;
+    if (!profile?.poc || !isScaleVisible(priceScale as unknown as ScaleLike)) return;
 
     const ctx = chart.ctx;
     const chartArea = chart.chartArea;
@@ -604,7 +615,7 @@ import { calculateVolumeProfile } from '@/lib/chart/indicators';
 export const measureRangePlugin = {
   id: 'measureRange',
   afterDraw(chart: Chart) {
-    const chartAny = chart as any;
+    const chartAny = chart as unknown as EnhancedChart;
     const measure = chartAny._measure || {};
     if (!measure.active || !chart.ctx || !chart.chartArea) return;
 
@@ -726,22 +737,23 @@ export function createAdvancedTooltipPlugin() {
   return {
     id: 'advancedTooltip',
     afterDraw(chart: Chart) {
+      const ec = chart as unknown as EnhancedChart;
       if (
         !chart.ctx ||
         !chart.chartArea ||
-        !(chart as any).crosshair ||
-        (chart as any).crosshair.x === null
+        !ec.crosshair ||
+        ec.crosshair.x === null
       )
         return;
 
       const candleData = (
-        chart.data.datasets[0]?.data as any[]
-      )?.[(chart as any).crosshair.snapIndex];
+        chart.data.datasets[0]?.data as unknown as Array<{ x: number; o: number; h: number; l: number; c: number; v?: number }> | undefined
+      )?.[ec.crosshair.snapIndex!];
       if (!candleData) return;
 
       const ctx = chart.ctx;
       const hasVolume =
-        Number.isFinite(candleData.v) && candleData.v > 0;
+        Number.isFinite(candleData.v) && candleData.v! > 0;
       const tooltipHeight = 42;
       const tooltipX = chart.chartArea.left + 8;
       const tooltipY = Math.max(
@@ -818,7 +830,7 @@ export function createAdvancedTooltipPlugin() {
         ],
       ];
       if (hasVolume)
-        rows.push(['VOL', compactNumber(candleData.v)]);
+        rows.push(['VOL', compactNumber(candleData.v!)]);
 
       ctx.font = '11px Inter, sans-serif';
       let cursorX = tooltipX + 10;
