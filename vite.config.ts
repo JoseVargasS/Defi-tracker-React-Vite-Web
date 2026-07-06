@@ -5,7 +5,7 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
-  base: '/DeFi-tracker/',
+  base: '/Defi-tracker-React-Vite-Web/',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
