@@ -15,14 +15,8 @@ function TokenIcon({ symbol, imgUrl }: { symbol: string; imgUrl: string }) {
       <img
         src={url}
         alt=""
+        className="token-icon"
         onError={() => setHasError(true)}
-        style={{
-          width: 20,
-          height: 20,
-          borderRadius: '50%',
-          verticalAlign: 'middle',
-          marginRight: 5,
-        }}
       />
     );
   }
@@ -67,9 +61,9 @@ export function ChainCard({ chainName, chainIcon, chainTotal, assets }: {
 
   return (
     <div className="wallet-assets-card">
-      <div className="wallet-assets-card-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, paddingBottom: 6, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      <div className="wallet-assets-card-head">
         <div className="wallet-section-title">
-          {validChainIcon && <img src={validChainIcon} alt="" style={{ width: 18, height: 18, verticalAlign: 'middle', marginRight: 4 }} />}
+          {validChainIcon && <img src={validChainIcon} alt="" className="chain-icon" />}
           {chainName}
         </div>
         <div className="chain-total-green">

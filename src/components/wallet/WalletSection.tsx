@@ -351,7 +351,7 @@ export function WalletSection() {
           </div>
         )}
 
-        <div id="walletData" style={{ marginTop: 12 }}>
+        <div id="walletData">
           {!loading && assets.length > 0 && (
             <WalletDashboard assets={assets} totalWorth={totalWorth} />
           )}

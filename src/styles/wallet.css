@@ -506,6 +506,22 @@
 }
 
 /* Token fallback icon */
+.token-icon {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  vertical-align: middle;
+  margin-right: 5px;
+  display: inline-block;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.chain-icon {
+  width: 18px; height: 18px;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
 .token-fallback-icon {
   display: inline-block; width: 20px; height: 20px;
   border-radius: 50%; background: #2a2d35;
