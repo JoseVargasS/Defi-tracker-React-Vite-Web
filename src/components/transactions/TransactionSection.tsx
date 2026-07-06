@@ -14,10 +14,29 @@ interface ChainState {
   loading: boolean
 }
 
-function normalizeEntry(raw: any, userAddress: string): TransactionEntry {
+interface RawTransaction {
+  hash?: string;
+  transactionHash?: string;
+  txHash?: string;
+  timeStamp?: string | number;
+  timestamp?: string | number;
+  time?: string | number;
+  tokenSymbol?: string;
+  symbol?: string;
+  tokenName?: string;
+  tokenDecimal?: string | number;
+  value?: string | number;
+  tokenValue?: string | number;
+  amount?: string | number;
+  from?: string;
+  to?: string;
+  imgUrl?: string;
+}
+
+function normalizeEntry(raw: RawTransaction, userAddress: string): TransactionEntry {
   const addr = (raw.from || '').toLowerCase()
   const isSent = addr === (userAddress || '').toLowerCase()
-  
+
   const decimals = raw.tokenDecimal !== undefined && raw.tokenDecimal !== null
     ? Number(raw.tokenDecimal)
     : 18;
@@ -62,7 +81,7 @@ export default function TransactionSection() {
     setEth(prev => ({ ...prev, loading: true }))
     try {
       const raw = await fetchEtherscanTransactions(address, 1)
-      const normalized = raw.map(tx => normalizeEntry(tx, address))
+      const normalized = raw.map(tx => normalizeEntry(tx as RawTransaction, address))
       setEth({ all: deduplicate(normalized), offset: 0, loading: false })
     } catch {
       setEth(prev => ({ ...prev, loading: false }))
@@ -74,7 +93,7 @@ export default function TransactionSection() {
     setBase(prev => ({ ...prev, loading: true }))
     try {
       const raw = await fetchBaseTransactions(address)
-      const normalized = raw.map(tx => normalizeEntry(tx, address))
+      const normalized = raw.map(tx => normalizeEntry(tx as RawTransaction, address))
       setBase({ all: deduplicate(normalized), offset: 0, loading: false })
     } catch {
       setBase(prev => ({ ...prev, loading: false }))

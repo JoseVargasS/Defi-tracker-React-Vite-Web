@@ -74,11 +74,24 @@ export async function fetchPriceBatch(symbols: string[]): Promise<{ symbol: stri
 }
 
 /**
+ * Shape of a Binance 24h ticker response (subset used by the app).
+ */
+export interface Binance24hStats {
+  symbol: string;
+  priceChange: string;
+  priceChangePercent: string;
+  highPrice: string;
+  lowPrice: string;
+  volume: string;
+  quoteVolume: string;
+}
+
+/**
  * Fetch 24-hour ticker stats for a single symbol.
  */
-export async function fetch24hStats(symbol: string): Promise<Record<string, unknown> | null> {
+export async function fetch24hStats(symbol: string): Promise<Binance24hStats | null> {
   try {
-    const res = await makeRequest(`${BINANCE_API}/ticker/24hr?symbol=${symbol}`) as Record<string, unknown>;
+    const res = await makeRequest(`${BINANCE_API}/ticker/24hr?symbol=${symbol}`) as Binance24hStats;
     return res;
   } catch (err) {
     console.warn('fetch24hStats error', symbol, err);
@@ -90,11 +103,11 @@ export async function fetch24hStats(symbol: string): Promise<Record<string, unkn
  * Fetch 24-hour ticker stats for multiple symbols in one request.
  * Uses Binance's `symbols` query parameter (URL-encoded JSON array).
  */
-export async function fetch24hStatsBatch(symbols: string[]): Promise<Record<string, unknown>[]> {
+export async function fetch24hStatsBatch(symbols: string[]): Promise<Binance24hStats[]> {
   if (!symbols || symbols.length === 0) return [];
   try {
     const param = encodeURIComponent(JSON.stringify(symbols));
-    const res = await makeRequest(`${BINANCE_API}/ticker/24hr?symbols=${param}`) as Record<string, unknown>[];
+    const res = await makeRequest(`${BINANCE_API}/ticker/24hr?symbols=${param}`) as Binance24hStats[];
     return Array.isArray(res) ? res : [];
   } catch (err) {
     console.warn('fetch24hStatsBatch error for', symbols, err);

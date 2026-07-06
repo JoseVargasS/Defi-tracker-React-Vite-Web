@@ -5,6 +5,7 @@ import { ETH_API, ETH_KEY, HAS_COINSTATS_CONFIG, HAS_ETHERSCAN_CONFIG, SUPPORTED
 import { makeRequest } from '@/api/client';
 import { safeErrorMessage, mapWithConcurrency, integerAmountToNumber, TOKEN_ICON_FALLBACKS } from '@/lib/utils';
 import { getTokenAssetsByAddress } from '@/api/coinstats';
+import type { EtherscanTokenTx } from '@/api/etherscan';
 import { WalletDashboard } from './WalletDashboard';
 
 const BALANCE_CONCURRENCY = 1;
@@ -55,7 +56,9 @@ async function fetchExplorerBalances(address: string, chain: { id: string; name:
 
   const balances: { name: string; symbol: string; amount: number; price: number | null; imgUrl: string | null }[] = [];
 
-  const nativeWei: string = nativeResponse.status === 'fulfilled' ? (nativeResponse.value as any)?.result ?? '0' : '0';
+  const nativeWei: string = nativeResponse.status === 'fulfilled'
+    ? (nativeResponse.value as { result?: string } | undefined)?.result ?? '0'
+    : '0';
   const nativeAmount = integerAmountToNumber(nativeWei, 18);
   const nativePrice = await getFallbackTokenPrice(fallback.nativeSymbol);
   if (nativeAmount > 0) {
@@ -68,9 +71,10 @@ async function fetchExplorerBalances(address: string, chain: { id: string; name:
     });
   }
 
-  const tokenTxs: any[] = tokenResponse.status === 'fulfilled' && Array.isArray((tokenResponse.value as any)?.result)
-    ? (tokenResponse.value as any).result
-    : [];
+  const tokenResult = tokenResponse.status === 'fulfilled'
+    ? (tokenResponse.value as { result?: unknown } | undefined)?.result
+    : undefined;
+  const tokenTxs: EtherscanTokenTx[] = Array.isArray(tokenResult) ? (tokenResult as EtherscanTokenTx[]) : [];
 
   const addressLower = address.toLowerCase();
   const tokenBalances = new Map<string, { raw: bigint; decimals: number; name: string; symbol: string; imgUrl: string | null }>();

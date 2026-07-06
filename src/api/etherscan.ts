@@ -20,6 +20,17 @@ export async function getETHBalance(address: string): Promise<string | null> {
 }
 
 // ponytail: Etherscan v2 may lack tokenlist endpoint; reconstructing from tokentx
+
+export interface EtherscanTokenTx {
+  contractAddress: string;
+  tokenName: string;
+  tokenSymbol: string;
+  tokenDecimal: string;
+  value: string;
+  to: string;
+  from: string;
+}
+
 export async function getTokenBalances(
   address: string
 ): Promise<{
@@ -47,7 +58,7 @@ export async function getTokenBalances(
       }
     >();
 
-    for (const tx of data.result as any[]) {
+    for (const tx of data.result as EtherscanTokenTx[]) {
       const contract = (tx.contractAddress || '').toLowerCase();
       if (!contract) continue;
       const current = balances.get(contract) || {

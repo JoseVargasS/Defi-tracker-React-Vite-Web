@@ -1,12 +1,11 @@
-import type { Chart, Point } from 'chart.js';
-import type { BubbleDataPoint, FinancialDataPoint } from 'chart.js';
+import type { Chart } from 'chart.js';
 import { CHART_THEME } from '@/lib/chart/indicators';
 import { compactNumber, type Candle } from '@/lib/chart/normalize';
 import type { EnhancedChart, ScaleLike, ChartDatasetLike, VPRow, CrosshairState } from '@/lib/chart/types';
 
 type ChartPoint = { x: number; y?: number | null; q?: number };
-const asPoints = (data: (number | Point | [number, number] | BubbleDataPoint | FinancialDataPoint | null)[]): ChartPoint[] =>
-  data as unknown as ChartPoint[];
+const asPoints = (data: unknown[]): ChartPoint[] =>
+  (data ?? []) as unknown as ChartPoint[];
 
 const getPairMeta = (symbol?: string) => {
   const s = String(symbol || '').toUpperCase();
@@ -344,8 +343,7 @@ export const indicatorLegendPlugin = {
     ctx.textBaseline = 'top';
 
     if (isScaleVisible(volumeScale as unknown as ScaleLike)) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = chart.data.datasets as any[];
+      const data = chart.data.datasets as ChartDatasetLike[];
       const volumeData =
         data.find(
       d => d.label === 'Volume',
@@ -376,8 +374,7 @@ export const indicatorLegendPlugin = {
     }
 
     if (isScaleVisible(stochScale as unknown as ScaleLike)) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = chart.data.datasets as any[];
+      const data = chart.data.datasets as ChartDatasetLike[];
       const kData =
         data.find(
       d => d.label === 'Stoch RSI %K',
@@ -431,10 +428,8 @@ export const indicatorLegendPlugin = {
     if (smaDs || emaDs) {
       const x = chart.chartArea.left + 10;
       let y = chart.chartArea.top + 40;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const priceSmaData = smaDs ? asPoints(smaDs.data as any) : [];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const priceEmaData = emaDs ? asPoints(emaDs.data as any) : [];
+      const priceSmaData = smaDs ? asPoints(smaDs.data ?? []) : [];
+      const priceEmaData = emaDs ? asPoints(emaDs.data ?? []) : [];
       const smaPoint = priceSmaData[index] || lastDefined(priceSmaData);
       const emaPoint = priceEmaData[index] || lastDefined(priceEmaData);
 

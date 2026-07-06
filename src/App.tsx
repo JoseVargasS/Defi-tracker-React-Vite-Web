@@ -253,7 +253,7 @@ export default function App() {
                       onChange={(e) => {
                         const v = e.target.value;
                         if (v === '') { setChartIndicator('smaEnabled', false); return; }
-                        handleSmaPeriod(e as any);
+                        handleSmaPeriod(e);
                         setChartIndicator('smaEnabled', true);
                       }}
                       aria-label="SMA periodo"
@@ -268,7 +268,7 @@ export default function App() {
                       onChange={(e) => {
                         const v = e.target.value;
                         if (v === '') { setChartIndicator('emaEnabled', false); return; }
-                        handleEmaPeriod(e as any);
+                        handleEmaPeriod(e);
                         setChartIndicator('emaEnabled', true);
                       }}
                       aria-label="EMA periodo"

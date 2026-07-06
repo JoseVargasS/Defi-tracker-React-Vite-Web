@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// ponytail: Chart.js types are stricter than our local ChartDatasetLike; casts are intentional
 import { useRef, useEffect, useCallback } from 'react';
 import {
   Chart,
@@ -457,7 +459,6 @@ export default function CandlestickChart({
 
         const chart = new Chart(ctx, {
           type: 'candlestick',
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           data: { datasets: buildDatasets(symbol, visibleData, visibleSeries, inds) as any },
           options: {
             responsive: true,
@@ -470,7 +471,6 @@ export default function CandlestickChart({
               legend: { display: false },
               tooltip: { enabled: false },
             },
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             scales: createScales(interval, inds) as any,
           },
           plugins: [
@@ -674,9 +674,7 @@ export default function CandlestickChart({
 
         const visibleData = raw.slice(start, end);
         const visibleSeries = sliceTechnicalSeries(fullSeries, start, end);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         chart.data.datasets = buildDatasets(symbol, visibleData, visibleSeries, indicatorsRef.current) as any;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         chart.options.scales = createScales(interval, indicatorsRef.current) as any;
         chart.update('none');
       } catch (err) {
@@ -694,7 +692,6 @@ export default function CandlestickChart({
     const fullSeries = fullSeriesRef.current;
     if (!chart || !symbol || !rawData.length || !fullSeries) return;
     chart._indicators = { ...indicators };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     chart.options.scales = createScales(interval, indicators) as any;
     applyChartSlice(chart, rawData, fullSeries, symbol, indicators);
   // ponytail: symbol and interval are stable via refs, only indicators trigger rebuild

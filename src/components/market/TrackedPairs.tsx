@@ -56,7 +56,7 @@ export function TrackedPairs() {
     ]);
     const nextPrices: Record<string, number> = {};
     for (const p of priceRes) {
-      const val = parseFloat((p as any).price);
+      const val = parseFloat(p.price);
       if (Number.isFinite(val)) {
         nextPrices[p.symbol] = val;
       }
@@ -69,9 +69,8 @@ export function TrackedPairs() {
     setPrices((prev) => ({ ...prev, ...nextPrices }));
     const nextChanges: Record<string, string> = {};
     for (const s of statsRes) {
-      const sym = (s as any).symbol as string;
-      const pct = parseFloat((s as any).priceChangePercent ?? '0');
-      nextChanges[sym] = pct > 0 ? `+${pct.toFixed(2)}%` : `${pct.toFixed(2)}%`;
+      const pct = parseFloat(s.priceChangePercent || '0');
+      nextChanges[s.symbol] = pct > 0 ? `+${pct.toFixed(2)}%` : `${pct.toFixed(2)}%`;
     }
     setChanges(nextChanges);
   }, []);
