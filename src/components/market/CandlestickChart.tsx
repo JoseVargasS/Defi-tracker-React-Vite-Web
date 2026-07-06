@@ -466,7 +466,7 @@ export default function CandlestickChart({
             animation: false,
             parsing: false,
             interaction: { mode: 'nearest', intersect: false },
-            layout: { padding: { right: 98, bottom: 28, left: 6, top: 12 } },
+            layout: { padding: 0 },
             plugins: {
               legend: { display: false },
               tooltip: { enabled: false },

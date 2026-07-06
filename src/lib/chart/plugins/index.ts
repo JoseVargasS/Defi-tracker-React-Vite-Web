@@ -298,7 +298,8 @@ export const currentPricePlugin = {
     ctx.font = 'bold 12px Inter, sans-serif';
     const labelWidth = ctx.measureText(label).width + 18;
     const labelHeight = 22;
-    const boxX = chart.chartArea.right + 4;
+    // ponytail: tag overlays the rightmost candle so right padding can be 0
+    const boxX = chart.chartArea.right - labelWidth - 2;
     const boxY = clamp(
       yPixel - labelHeight / 2,
       priceScale.top,
@@ -307,11 +308,11 @@ export const currentPricePlugin = {
 
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.moveTo(boxX, boxY + labelHeight / 2);
-    ctx.lineTo(boxX + 7, boxY);
-    ctx.lineTo(boxX + labelWidth, boxY);
-    ctx.lineTo(boxX + labelWidth, boxY + labelHeight);
-    ctx.lineTo(boxX + 7, boxY + labelHeight);
+    ctx.moveTo(boxX, boxY);
+    ctx.lineTo(boxX + labelWidth - 7, boxY);
+    ctx.lineTo(boxX + labelWidth, boxY + labelHeight / 2);
+    ctx.lineTo(boxX + labelWidth - 7, boxY + labelHeight);
+    ctx.lineTo(boxX, boxY + labelHeight);
     ctx.closePath();
     ctx.fill();
     ctx.fillStyle = '#fff';
