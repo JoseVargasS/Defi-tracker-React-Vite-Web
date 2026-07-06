@@ -5,147 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self' https://api.binance.com https://openapiv1.coinstats.app https://api.etherscan.io https://cdn.jsdelivr.net; object-src 'none'; base-uri 'self'; upgrade-insecure-requests"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' https: data:; connect-src 'self' https://api.binance.com https://openapiv1.coinstats.app https://api.etherscan.io; object-src 'none'; base-uri 'self'; upgrade-insecure-requests"
     />
     <meta name="referrer" content="no-referrer" />
     <link rel="icon" href="https://cdn-icons-png.flaticon.com/512/4214/4214500.png" />
     <title>DeFi & Crypto Terminal</title>
-    <link rel="stylesheet" href="styles.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
+    <script type="module" src="/src/main.tsx"></script>
   </head>
   <body>
-    <div id="app">
-      <header class="app-header">
-        <div class="main-logo-title">
-          <span class="logo-mark">
-            <img src="https://cdn-icons-png.flaticon.com/512/4214/4214500.png" alt="" />
-          </span>
-          <div>
-            <p>Portfolio terminal</p>
-            <h1>DeFi & Crypto Terminal</h1>
-          </div>
-        </div>
-      </header>
-
-      <main class="main-grid">
-        <section class="wallet-section">
-          <header>
-            <h1>Consulta billetera ETH</h1>
-          </header>
-          <div class="card">
-            <div class="wallet-saved-group">
-              <select id="savedWallets" class="wallet-saved-select"></select>
-              <button id="btnSaveWallet" class="btn-wallet">Guardar</button>
-              <button id="btnDeleteWallet" class="btn-trash" title="Eliminar billetera">
-                <img src="./images/trash-icon.svg" alt="Eliminar" />
-              </button>
-              <button id="btnCopyWallet" class="btn-copy" title="Copiar direccion">
-                <img src="./images/copy-icon.png" alt="Copiar" />
-              </button>
-              <button id="btnClearAppStorage" class="btn-clear-storage" title="Limpiar datos locales">Limpiar</button>
-            </div>
-            <h2>Ingresa tu direccion</h2>
-            <div class="input-group">
-              <input id="walletAddress" placeholder="0x... direccion ETH" />
-              <button id="btnFetchWallet" class="btn-search" title="Buscar">
-                <img src="./images/search-icon.svg" alt="Buscar" />
-              </button>
-            </div>
-            <ul id="walletData" class="wallet-balances"></ul>
-          </div>
-        </section>
-
-        <section class="crypto-section">
-          <h1>Mercado spot</h1>
-          <form id="pair-form">
-            <input
-              type="text"
-              id="pair-search"
-              placeholder="Buscar par: ETH/BTC, BTC/USDT..."
-              autocomplete="off"
-            />
-            <div id="pair-suggestions"></div>
-          </form>
-          <div id="tracked-pairs"></div>
-          <div id="pair-details" class="hidden">
-            <div class="chart-topline">
-              <div class="chart-market-summary">
-                <span class="chart-kicker">Spot</span>
-                <h3 id="pair-title"></h3>
-                <div id="pair-price"></div>
-              </div>
-              <button id="close-details" type="button" aria-label="Cerrar panel">x</button>
-            </div>
-            <div class="chart-controls-row">
-              <div class="interval-selector" aria-label="Intervalos de velas"></div>
-              <div class="indicator-selector" aria-label="Indicadores tecnicos">
-                <button type="button" class="chart-indicator-toggle active" data-indicator="bollinger">BB</button>
-                <button type="button" class="chart-indicator-toggle active" data-indicator="volume">VOL</button>
-                <button type="button" class="chart-indicator-toggle active" data-indicator="volumeProfile">VP</button>
-                <button type="button" class="chart-indicator-toggle active" data-indicator="stochRsi">Stoch RSI</button>
-              </div>
-            </div>
-            <div id="chart-wrapper">
-              <button
-                id="chart-measure-toggle"
-                type="button"
-                class="chart-tool-button"
-                title="Medir rango"
-                aria-label="Medir rango de precio"
-                aria-pressed="false"
-              >%</button>
-              <canvas id="candlestick-chart"></canvas>
-            </div>
-          </div>
-        </section>
-
-        <div class="transactions-container">
-          <div id="eth-transactions-section" class="tx-section">
-            <header>
-              <h1>Transacciones ETH/ERC20</h1>
-            </header>
-            <div id="eth-transactions-content" class="tx-content">
-              <table id="eth-txTable" class="tx-table-styled">
-                <tbody id="eth-txBody"></tbody>
-              </table>
-              <div class="load-more">
-                <button id="btnLoadMoreEth">Ver mas</button>
-              </div>
-            </div>
-          </div>
-
-          <div id="base-transactions-section" class="tx-section">
-            <header>
-              <h1>Transacciones Base</h1>
-            </header>
-            <div id="base-transactions-content" class="tx-content">
-              <table id="base-txTable" class="tx-table-styled">
-                <tbody id="base-txBody"></tbody>
-              </table>
-              <div class="load-more">
-                <button id="btnLoadMoreBase">Ver mas</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
-
-      <footer>
-        <p>
-          Inspirado en
-          <a href="https://app.usual.money/" target="_blank" rel="noreferrer">Usual Money</a>
-          | Hecho por Josesitooo
-        </p>
-      </footer>
-    </div>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
-    <script type="module" src="./js/bootstrap.js"></script>
+    <div id="root"></div>
   </body>
 </html>

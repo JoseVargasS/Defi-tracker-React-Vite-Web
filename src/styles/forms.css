@@ -1,0 +1,89 @@
+form {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+#pair-form {
+  position: relative;
+}
+
+input[type="text"] {
+  background: linear-gradient(145deg, #23262f 0%, #1e2129 100%);
+  border: 1.5px solid #353945;
+  border-radius: 12px;
+  color: #f4f4f4;
+  padding: 14px 18px;
+  font-size: 1rem;
+  outline: none;
+  flex: 1;
+  transition: all 0.2s;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+input[type="text"]:focus {
+  border-color: #45b26b;
+  box-shadow:
+    0 0 0 3px rgba(69, 178, 107, 0.2),
+    inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+input[type="text"]::placeholder {
+  color: #666;
+}
+
+button,
+.delete-btn,
+#btnFetchWallet {
+  font-weight: 700;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 22px;
+  font-size: 1rem;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.3s ease;
+}
+
+#pair-suggestions {
+  position: absolute;
+  background: linear-gradient(180deg, #23262f 0%, #1e2129 100%);
+  border: 1.5px solid #353945;
+  border-radius: 12px;
+  margin-top: 48px;
+  z-index: 10;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  left: 0;
+  right: auto;
+  min-width: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  display: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+#pair-suggestions.active {
+  display: block;
+}
+
+#pair-suggestions div {
+  padding: 14px 18px;
+  cursor: pointer;
+  color: #f4f4f4;
+  border-bottom: 1px solid #2d313a;
+  transition: all 0.15s;
+}
+
+#pair-suggestions div:last-child {
+  border-bottom: none;
+}
+
+#pair-suggestions div:hover {
+  background: linear-gradient(90deg, #353945 0%, #2d313a 100%);
+  padding-left: 22px;
+}
+
+
