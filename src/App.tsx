@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { type ChangeEvent, useEffect, useState } from 'react';
 import {
   Chart,
   BarController,
@@ -52,6 +52,8 @@ interface Stats24h {
 }
 
 export default function App() {
+  const activeView = useMarketStore((s) => s.activeView);
+  const setActiveView = useMarketStore((s) => s.setActiveView);
   const setTracked = useMarketStore((s) => s.setTracked);
   const currentPair = useMarketStore((s) => s.currentPair);
   const currentInterval = useMarketStore((s) => s.currentInterval);
@@ -62,6 +64,8 @@ export default function App() {
   const setCurrentPair = useMarketStore((s) => s.setCurrentPair);
   const setCurrentInterval = useMarketStore((s) => s.setCurrentInterval);
   const setChartIndicator = useMarketStore((s) => s.setChartIndicator);
+  const setSmaPeriod = useMarketStore((s) => s.setSmaPeriod);
+  const setEmaPeriod = useMarketStore((s) => s.setEmaPeriod);
   const lastPrices = useMarketStore((s) => s.lastPrices);
   const [stats24h, setStats24h] = useState<Stats24h | null>(null);
 
@@ -125,17 +129,50 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const handleSmaPeriod = (e: ChangeEvent<HTMLSelectElement>) => {
+    const v = Number(e.target.value);
+    if (v === 100 || v === 200) setSmaPeriod(v);
+  };
+  const handleEmaPeriod = (e: ChangeEvent<HTMLSelectElement>) => {
+    const v = Number(e.target.value);
+    if (v === 100 || v === 200) setEmaPeriod(v);
+  };
+
+  const smaSelectValue = chartIndicators.smaEnabled ? String(chartIndicators.smaPeriod) : '';
+  const emaSelectValue = chartIndicators.emaEnabled ? String(chartIndicators.emaPeriod) : '';
+
   return (
     <>
       <Header />
-      <main className="main-grid">
-        <WalletSection />
-        <section className="crypto-section">
-          <h1>Mercado spot</h1>
-          <PairSearch />
-          <TrackedPairs />
-          <div id="pair-details">
-            {currentPair && (
+      <nav className="view-tabs" role="tablist" aria-label="Navegacion principal">
+        <button
+          role="tab"
+          aria-selected={activeView === 'market'}
+          className={activeView === 'market' ? 'active' : ''}
+          onClick={() => setActiveView('market')}
+        >
+          Mercado
+        </button>
+        <button
+          role="tab"
+          aria-selected={activeView === 'wallet'}
+          className={activeView === 'wallet' ? 'active' : ''}
+          onClick={() => setActiveView('wallet')}
+        >
+          Wallet
+        </button>
+      </nav>
+      <main className={`main-grid view-${activeView}`}>
+        <section className="market-view">
+          <aside className="market-sidebar">
+            <div className="market-sidebar-header">
+              <h1>Mercado spot</h1>
+            </div>
+            <PairSearch />
+            <TrackedPairs />
+          </aside>
+          <div className="market-chart" id="pair-details">
+            {currentPair ? (
               <>
                 <div className="chart-topline">
                   <div className="chart-market-summary">
@@ -189,6 +226,36 @@ export default function App() {
                         {ind.label}
                       </button>
                     ))}
+                    <select
+                      className={`indicator-select${chartIndicators.smaEnabled ? ' active' : ''}`}
+                      value={smaSelectValue}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === '') { setChartIndicator('smaEnabled', false); return; }
+                        handleSmaPeriod(e as any);
+                        setChartIndicator('smaEnabled', true);
+                      }}
+                      aria-label="SMA periodo"
+                    >
+                      <option value="">SMA</option>
+                      <option value="200">SMA 200</option>
+                      <option value="100">SMA 100</option>
+                    </select>
+                    <select
+                      className={`indicator-select${chartIndicators.emaEnabled ? ' active' : ''}`}
+                      value={emaSelectValue}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === '') { setChartIndicator('emaEnabled', false); return; }
+                        handleEmaPeriod(e as any);
+                        setChartIndicator('emaEnabled', true);
+                      }}
+                      aria-label="EMA periodo"
+                    >
+                      <option value="">EMA</option>
+                      <option value="200">EMA 200</option>
+                      <option value="100">EMA 100</option>
+                    </select>
                   </div>
                 </div>
                 <div id="chart-wrapper">
@@ -211,10 +278,22 @@ export default function App() {
                   />
                 </div>
               </>
+            ) : (
+              <div className="chart-empty-state">
+                <div className="chart-empty-icon">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" opacity="0.4">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                  </svg>
+                </div>
+                <p>Selecciona un par para ver la grafica</p>
+              </div>
             )}
           </div>
         </section>
-        <TransactionSection />
+        <section className="wallet-view">
+          <WalletSection />
+          <TransactionSection />
+        </section>
       </main>
       <Footer />
     </>

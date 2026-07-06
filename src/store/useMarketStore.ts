@@ -6,6 +6,10 @@ interface ChartIndicators {
   volume: boolean;
   stochRsi: boolean;
   volumeProfile: boolean;
+  smaEnabled: boolean;
+  smaPeriod: number;
+  emaEnabled: boolean;
+  emaPeriod: number;
 }
 
 interface ChartMeasure {
@@ -16,6 +20,7 @@ interface ChartMeasure {
 }
 
 interface MarketState {
+  activeView: 'market' | 'wallet';
   tracked: string[];
   currentPair: string | null;
   currentInterval: string;
@@ -31,6 +36,7 @@ interface MarketState {
   currentPairPrice: number | null;
   candleRenderLock: boolean;
 
+  setActiveView: (view: 'market' | 'wallet') => void;
   setTracked: (pairs: string[]) => void;
   addTracked: (pair: string) => void;
   removeTracked: (pair: string) => void;
@@ -38,6 +44,8 @@ interface MarketState {
   setCurrentInterval: (interval: string) => void;
   setChartZoom: (zoom: number) => void;
   setChartIndicator: (key: keyof ChartIndicators, value: boolean) => void;
+  setSmaPeriod: (period: number) => void;
+  setEmaPeriod: (period: number) => void;
   setCoinIcons: (icons: Record<string, string>) => void;
   setCoinsList: (list: unknown[]) => void;
   setCurrentPairPrice: (price: number | null) => void;
@@ -47,6 +55,7 @@ interface MarketState {
 }
 
 export const useMarketStore = create<MarketState>((set) => ({
+  activeView: 'market',
   tracked: [...DEFAULT_TRACKED_PAIRS],
   currentPair: null,
   currentInterval: '1d',
@@ -56,6 +65,10 @@ export const useMarketStore = create<MarketState>((set) => ({
     volume: true,
     stochRsi: true,
     volumeProfile: true,
+    smaEnabled: false,
+    smaPeriod: 200,
+    emaEnabled: false,
+    emaPeriod: 200,
   },
   chartMeasure: {
     active: false,
@@ -72,6 +85,7 @@ export const useMarketStore = create<MarketState>((set) => ({
   currentPairPrice: null,
   candleRenderLock: false,
 
+  setActiveView: (view) => set({ activeView: view }),
   setTracked: (pairs) => set({ tracked: pairs }),
   addTracked: (pair) =>
     set((state) => ({
@@ -89,6 +103,14 @@ export const useMarketStore = create<MarketState>((set) => ({
   setChartIndicator: (key, value) =>
     set((state) => ({
       chartIndicators: { ...state.chartIndicators, [key]: value },
+    })),
+  setSmaPeriod: (period) =>
+    set((state) => ({
+      chartIndicators: { ...state.chartIndicators, smaPeriod: period },
+    })),
+  setEmaPeriod: (period) =>
+    set((state) => ({
+      chartIndicators: { ...state.chartIndicators, emaPeriod: period },
     })),
   setCoinIcons: (icons) => set({ coinIcons: icons }),
   setCoinsList: (list) => set({ coinsList: list }),

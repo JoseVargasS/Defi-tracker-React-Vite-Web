@@ -1,23 +1,35 @@
-import { Candle, XY } from './normalize';
+import { Candle, XY } from "./normalize";
 
 export const CHART_THEME = {
-  bg: '#060708',
-  panel: '#0b0d10',
-  grid: 'rgba(255, 255, 255, 0.055)',
-  text: '#aeb4bd',
-  muted: '#69707a',
-  up: '#00c087',
-  down: '#f23645',
-  neutral: '#858b93',
-  accent: '#f2c94c',
-  stochK: '#2f80ed',
-  stochD: '#f2994a',
-  border: 'rgba(255, 255, 255, 0.1)',
+  bg: "#060708",
+  panel: "#0b0d10",
+  grid: "rgba(255, 255, 255, 0.055)",
+  text: "#aeb4bd",
+  muted: "#69707a",
+  up: "#00c087",
+  down: "#f23645",
+  neutral: "#858b93",
+  accent: "#f2c94c",
+  stochK: "#2f80ed",
+  stochD: "#f2994a",
+  stochLevelOver: "rgba(242, 54, 69, 0.35)",
+  stochLevelUnder: "rgba(0, 192, 135, 0.35)",
+  sma: "#f5eef2",
+  ema: "#06b6d4",
+  bbLine: "rgba(242, 201, 76, 0.78)",
+  bbFill: "rgba(242, 201, 76, 0.055)",
+  bbBasis: "rgba(235, 87, 87, 0.7)",
+  volGrid: "rgba(255, 255, 255, 0.035)",
+  stochGrid: "rgba(255, 255, 255, 0.04)",
+  plPositive: "#1ecb81",
+  plNegative: "#e74c3c",
+  plNeutral: "#aaa",
+  border: "rgba(255, 255, 255, 0.1)",
 };
 
 function calculateRSI(data: Candle[], period = 14): XY[] {
   if (!Array.isArray(data) || data.length <= period) {
-    return (data || []).map(d => ({ x: d.x, y: null }));
+    return (data || []).map((d) => ({ x: d.x, y: null }));
   }
 
   const rsi: XY[] = [{ x: data[0]!.x, y: null }];
@@ -55,7 +67,7 @@ function calculateRSI(data: Candle[], period = 14): XY[] {
 }
 
 export function calculateVolume(data: Candle[]) {
-  return data.map(item => ({
+  return data.map((item) => ({
     x: item.x,
     y: item.v || 0,
     q: item.q || 0,
@@ -65,7 +77,7 @@ export function calculateVolume(data: Candle[]) {
 
 export function calculateVolumeProfile(data: Candle[], rowCount = 48) {
   const candles = (data || []).filter(
-    item =>
+    (item) =>
       Number.isFinite(item?.h) &&
       Number.isFinite(item?.l) &&
       Number.isFinite(item?.c) &&
@@ -74,8 +86,8 @@ export function calculateVolumeProfile(data: Candle[], rowCount = 48) {
 
   if (!candles.length) return { rows: [], poc: null, maxVolume: 0 };
 
-  const minPrice = Math.min(...candles.map(item => item.l));
-  const maxPrice = Math.max(...candles.map(item => item.h));
+  const minPrice = Math.min(...candles.map((item) => item.l));
+  const maxPrice = Math.max(...candles.map((item) => item.h));
   if (
     !Number.isFinite(minPrice) ||
     !Number.isFinite(maxPrice) ||
@@ -99,8 +111,9 @@ export function calculateVolumeProfile(data: Candle[], rowCount = 48) {
     };
   });
 
-  candles.forEach(candle => {
-    const rawVolume = Number.isFinite(candle.q) && candle.q > 0 ? candle.q : candle.v;
+  candles.forEach((candle) => {
+    const rawVolume =
+      Number.isFinite(candle.q) && candle.q > 0 ? candle.q : candle.v;
     const volume = Number.isFinite(rawVolume) ? rawVolume : 0;
     if (volume <= 0) return;
 
@@ -113,7 +126,7 @@ export function calculateVolumeProfile(data: Candle[], rowCount = 48) {
         0,
         Math.min(rows.length - 1, Math.floor((candle.c - minPrice) / rowSize)),
       );
-      rows[idx]![isUp ? 'up' : 'down'] += volume;
+      rows[idx]![isUp ? "up" : "down"] += volume;
       rows[idx]!.total += volume;
       return;
     }
@@ -134,7 +147,7 @@ export function calculateVolumeProfile(data: Candle[], rowCount = 48) {
       if (overlap <= 0) continue;
 
       const rowVolume = volume * (overlap / candleRange);
-      row[isUp ? 'up' : 'down'] += rowVolume;
+      row[isUp ? "up" : "down"] += rowVolume;
       row.total += rowVolume;
     }
   });
@@ -148,7 +161,11 @@ export function calculateVolumeProfile(data: Candle[], rowCount = 48) {
   return { rows, poc, maxVolume };
 }
 
-export function calculateBollingerBands(data: Candle[], period = 20, multiplier = 2) {
+export function calculateBollingerBands(
+  data: Candle[],
+  period = 20,
+  multiplier = 2,
+) {
   const bands: { upper: XY[]; middle: XY[]; lower: XY[] } = {
     upper: [],
     middle: [],
@@ -185,13 +202,13 @@ export function calculateStochRSI(
   dPeriod = 3,
 ) {
   const rsi = calculateRSI(data, rsiPeriod);
-  const rsiValues = rsi.filter(item => item.y !== null);
+  const rsiValues = rsi.filter((item) => item.y !== null);
   const rsiOffset = rsi.length - rsiValues.length;
   const rawK = rsiValues.map((item, index) => {
     if (index < stochPeriod - 1) return null;
     const slice = rsiValues.slice(index - stochPeriod + 1, index + 1);
-    const low = Math.min(...slice.map(d => d.y!));
-    const high = Math.max(...slice.map(d => d.y!));
+    const low = Math.min(...slice.map((d) => d.y!));
+    const high = Math.max(...slice.map((d) => d.y!));
     return high === low ? 0 : ((item.y! - low) / (high - low)) * 100;
   });
 
@@ -199,7 +216,7 @@ export function calculateStochRSI(
     values.map((value, index) => {
       if (value === null || index < period - 1) return null;
       const slice = values.slice(index - period + 1, index + 1);
-      return slice.some(v => v === null)
+      return slice.some((v) => v === null)
         ? null
         : slice.reduce<number>((acc, v) => acc + (v ?? 0), 0) / period;
     });
@@ -226,3 +243,27 @@ export function calculateStochRSI(
 }
 
 export { calculateRSI };
+
+export function calculateSMA(data: Candle[], period: number): XY[] {
+  return data.map((item, i) => {
+    if (i < period - 1) return { x: item.x, y: null };
+    const sum = data
+      .slice(i - period + 1, i + 1)
+      .reduce((acc, d) => acc + d.c, 0);
+    return { x: item.x, y: sum / period };
+  });
+}
+
+export function calculateEMA(data: Candle[], period: number): XY[] {
+  const k = 2 / (period + 1);
+  let ema = 0;
+  return data.map((item, i) => {
+    if (i < period - 1) return { x: item.x, y: null };
+    if (i === period - 1) {
+      ema = data.slice(0, period).reduce((acc, d) => acc + d.c, 0) / period;
+      return { x: item.x, y: ema };
+    }
+    ema = item.c * k + ema * (1 - k);
+    return { x: item.x, y: ema };
+  });
+}

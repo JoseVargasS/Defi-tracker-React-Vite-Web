@@ -414,6 +414,37 @@ export const indicatorLegendPlugin = {
         drawValueChip(ctx, chartAny, stochScale, chip.value, chip.color, chip.y);
       });
     }
+
+    const dsList = chart.data.datasets as any[];
+    const smaDs = dsList.find((d: any) => d.label?.startsWith('SMA '));
+    const emaDs = dsList.find((d: any) => d.label?.startsWith('EMA '));
+
+    if (smaDs || emaDs) {
+      const x = chart.chartArea.left + 10;
+      let y = chart.chartArea.top + 40;
+      const priceSmaData = smaDs ? asPoints(smaDs.data) : [];
+      const priceEmaData = emaDs ? asPoints(emaDs.data) : [];
+      const smaPoint = priceSmaData[index] || lastDefined(priceSmaData);
+      const emaPoint = priceEmaData[index] || lastDefined(priceEmaData);
+
+      if (smaDs && Number.isFinite(smaPoint?.y)) {
+        ctx.fillStyle = CHART_THEME.sma;
+        ctx.fillText(`v SMA ${smaDs.label?.replace('SMA ', '')}`, x, y);
+        const textW = ctx.measureText(`v SMA ${smaDs.label?.replace('SMA ', '')}  `).width;
+        ctx.fillStyle = '#f5f7fa';
+        ctx.fillText(Number(smaPoint!.y!).toFixed(6), x + textW, y);
+        y += 16;
+      }
+
+      if (emaDs && Number.isFinite(emaPoint?.y)) {
+        ctx.fillStyle = CHART_THEME.ema;
+        ctx.fillText(`v EMA ${emaDs.label?.replace('EMA ', '')}`, x, y);
+        const textW = ctx.measureText(`v EMA ${emaDs.label?.replace('EMA ', '')}  `).width;
+        ctx.fillStyle = '#f5f7fa';
+        ctx.fillText(Number(emaPoint!.y!).toFixed(6), x + textW, y);
+      }
+    }
+
     ctx.restore();
   },
 };

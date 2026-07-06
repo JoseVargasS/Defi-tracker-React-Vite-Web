@@ -22,6 +22,8 @@ import {
   calculateBollingerBands,
   calculateStochRSI,
   calculateVolume,
+  calculateSMA,
+  calculateEMA,
 } from '@/lib/chart/indicators';
 import {
   crosshairPlugin,
@@ -50,6 +52,10 @@ interface ChartIndicators {
   volume: boolean;
   stochRsi: boolean;
   volumeProfile: boolean;
+  smaEnabled: boolean;
+  smaPeriod: number;
+  emaEnabled: boolean;
+  emaPeriod: number;
 }
 
 export interface CandlestickChartProps {
@@ -64,6 +70,8 @@ interface TechnicalSeries {
   bands: { upper: XY[]; middle: XY[]; lower: XY[] };
   volume: { x: number; y: number; q: number; color: string }[];
   stochRsi: { k: XY[]; d: XY[] };
+  sma: { 100: XY[]; 200: XY[] };
+  ema: { 100: XY[]; 200: XY[] };
 }
 
 const CANDLE_COLORS = {
@@ -94,6 +102,14 @@ const buildTechnicalSeries = (data: Candle[]): TechnicalSeries => ({
   bands: calculateBollingerBands(data),
   volume: calculateVolume(data),
   stochRsi: calculateStochRSI(data),
+  sma: {
+    100: calculateSMA(data, 100),
+    200: calculateSMA(data, 200),
+  },
+  ema: {
+    100: calculateEMA(data, 100),
+    200: calculateEMA(data, 200),
+  },
 });
 
 const sliceTechnicalSeries = (
@@ -110,6 +126,14 @@ const sliceTechnicalSeries = (
   stochRsi: {
     k: series.stochRsi.k.slice(start, end),
     d: series.stochRsi.d.slice(start, end),
+  },
+  sma: {
+    100: series.sma[100].slice(start, end),
+    200: series.sma[200].slice(start, end),
+  },
+  ema: {
+    100: series.ema[100].slice(start, end),
+    200: series.ema[200].slice(start, end),
   },
 });
 
@@ -147,7 +171,7 @@ function buildDatasets(
         type: 'line',
         data: series.bands.upper,
         yAxisID: 'price',
-        borderColor: 'rgba(242, 201, 76, 0.78)',
+        borderColor: CHART_THEME.bbLine,
         borderWidth: 1.2,
         pointRadius: 0,
         fill: false,
@@ -158,8 +182,8 @@ function buildDatasets(
         type: 'line',
         data: series.bands.lower,
         yAxisID: 'price',
-        borderColor: 'rgba(242, 201, 76, 0.78)',
-        backgroundColor: 'rgba(242, 201, 76, 0.055)',
+        borderColor: CHART_THEME.bbLine,
+        backgroundColor: CHART_THEME.bbFill,
         borderWidth: 1.2,
         pointRadius: 0,
         fill: '-1',
@@ -170,7 +194,7 @@ function buildDatasets(
         type: 'line',
         data: series.bands.middle,
         yAxisID: 'price',
-        borderColor: 'rgba(235, 87, 87, 0.7)',
+        borderColor: CHART_THEME.bbBasis,
         borderWidth: 1,
         pointRadius: 0,
         fill: false,
@@ -223,7 +247,7 @@ function buildDatasets(
         type: 'line',
         data: horizontalLevel(candles, 80),
         yAxisID: 'stochRsi',
-        borderColor: 'rgba(242, 54, 69, 0.35)',
+        borderColor: CHART_THEME.stochLevelOver,
         borderDash: [4, 4] as [number, number],
         borderWidth: 1,
         pointRadius: 0,
@@ -234,13 +258,41 @@ function buildDatasets(
         type: 'line',
         data: horizontalLevel(candles, 20),
         yAxisID: 'stochRsi',
-        borderColor: 'rgba(0, 192, 135, 0.35)',
+        borderColor: CHART_THEME.stochLevelUnder,
         borderDash: [4, 4] as [number, number],
         borderWidth: 1,
         pointRadius: 0,
         order: 33,
       },
     );
+  }
+
+  if (indicators.smaEnabled) {
+    datasets.push({
+      label: `SMA ${indicators.smaPeriod}`,
+      type: 'line',
+      data: series.sma[indicators.smaPeriod as 100 | 200],
+      yAxisID: 'price',
+      borderColor: CHART_THEME.sma,
+      borderWidth: 2,
+      pointRadius: 0,
+      fill: false,
+      order: 5,
+    });
+  }
+
+  if (indicators.emaEnabled) {
+    datasets.push({
+      label: `EMA ${indicators.emaPeriod}`,
+      type: 'line',
+      data: series.ema[indicators.emaPeriod as 100 | 200],
+      yAxisID: 'price',
+      borderColor: CHART_THEME.ema,
+      borderWidth: 2,
+      pointRadius: 0,
+      fill: false,
+      order: 6,
+    });
   }
 
   return datasets;
@@ -277,7 +329,7 @@ function createScales(interval: string, indicators: ChartIndicators) {
       stack: PANEL_STACK,
       stackWeight: indicators.volume ? 1.35 : 0,
       beginAtZero: true,
-      grid: { color: 'rgba(255, 255, 255, 0.035)' },
+      grid: { color: CHART_THEME.volGrid },
       ticks: {
         color: CHART_THEME.muted,
         callback: (value: number) => {
@@ -299,7 +351,7 @@ function createScales(interval: string, indicators: ChartIndicators) {
       stackWeight: indicators.stochRsi ? 1.55 : 0,
       min: 0,
       max: 100,
-      grid: { color: 'rgba(255, 255, 255, 0.04)' },
+      grid: { color: CHART_THEME.stochGrid },
       ticks: { color: CHART_THEME.muted, stepSize: 50 },
       border: { color: CHART_THEME.border },
     },
@@ -419,7 +471,7 @@ export default function CandlestickChart({
             animation: false as any,
             parsing: false,
             interaction: { mode: 'nearest', intersect: false },
-            layout: { padding: { right: 98, bottom: 28, left: 6, top: 56 } },
+            layout: { padding: { right: 98, bottom: 28, left: 6, top: 12 } },
             plugins: {
               legend: { display: false },
               tooltip: { enabled: false },

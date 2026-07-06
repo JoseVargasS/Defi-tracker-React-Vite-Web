@@ -37,12 +37,12 @@ header {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 24px 2px;
+  padding: 4px 24px 0;
 }
 
 .logo-mark {
-  width: 42px;
-  height: 42px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
   border-radius: 8px;
@@ -51,24 +51,15 @@ header {
 }
 
 .main-logo-title img {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
 }
 
 .main-logo-title h1 {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: #f5f7fa;
-}
-
-.main-logo-title p {
-  margin: 0 0 1px;
-  color: #69707a;
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
 }
 
 section {
@@ -109,21 +100,54 @@ footer a:hover {
   text-decoration: underline;
 }
 
+/* Segmented Navigation */
+.view-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  max-width: 1880px;
+  margin: 0 auto;
+  padding: 0 24px;
+  box-sizing: border-box;
+}
+
+.view-tabs button {
+  padding: 6px 20px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #69707a;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.view-tabs button:hover {
+  color: #aeb4bd;
+}
+
+.view-tabs button.active {
+  color: #00c087;
+  border-bottom-color: #00c087;
+}
+
+.view-tabs button:focus-visible {
+  outline: 2px solid #00c087;
+  outline-offset: 2px;
+}
+
 /* Main Grid Layout */
 .main-grid {
-  display: grid;
-  grid-template-columns: minmax(360px, 500px) minmax(0, 1fr);
-  grid-template-rows: auto auto;
-  grid-template-areas:
-    "wallet crypto"
-    "transactions transactions";
-  align-items: start;
-  gap: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   width: 100%;
   box-sizing: border-box;
   margin: 0 auto;
   max-width: 1880px;
-  padding: 14px 24px 24px;
+  padding: 8px 24px 16px;
+  height: calc(100vh - 52px);
   background: transparent;
   border-radius: 0;
   box-shadow: none;
@@ -132,6 +156,95 @@ footer a:hover {
 .main-grid > * {
   margin-bottom: 0;
   box-sizing: border-box;
+}
+
+/* View visibility */
+.main-grid.view-market .wallet-view { display: none; }
+.main-grid.view-wallet .market-view { display: none; }
+
+/* Market view: sidebar left, chart right */
+.market-view {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  grid-template-rows: 1fr;
+  grid-template-areas: "sidebar chart";
+  gap: 14px;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+.market-sidebar {
+  grid-area: sidebar;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  max-height: calc(100vh - 160px);
+  overflow: hidden;
+  background: #0b0d10;
+  border: 1px solid #252a31;
+  border-radius: 8px;
+}
+
+.market-sidebar-header {
+  padding: 12px 12px 0;
+}
+
+.market-sidebar-header h1 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f5f7fa;
+  margin: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.market-chart {
+  grid-area: chart;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 600px;
+  height: 100%;
+  background: #060708;
+  border: 1px solid #252a31;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Wallet view */
+.wallet-view {
+  display: grid;
+  grid-template-columns: minmax(360px, 500px) minmax(0, 1fr);
+  grid-template-areas: "wallet transactions";
+  gap: 14px;
+  align-items: start;
+  width: 100%;
+}
+
+.wallet-view .wallet-section {
+  grid-area: wallet;
+}
+
+.wallet-view .transactions-container {
+  grid-area: transactions;
+}
+
+/* Chart empty state */
+.chart-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #555;
+  gap: 12px;
+}
+
+.chart-empty-state p {
+  font-size: 0.92rem;
+  font-weight: 500;
 }
 
 /* Animations */
@@ -147,15 +260,15 @@ footer a:hover {
 }
 
 .wallet-section,
-#eth-transactions-section,
-.crypto-section {
+.market-view,
+.view-tabs {
   animation: fadeInUp 0.6s ease-out;
 }
 
-#eth-transactions-section {
+.market-view {
   animation-delay: 0.1s;
 }
 
-.crypto-section {
+.view-tabs {
   animation-delay: 0.2s;
 }

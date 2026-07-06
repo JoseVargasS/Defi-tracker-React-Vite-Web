@@ -8,10 +8,7 @@ export function Header() {
             alt="DeFi & Crypto Terminal"
           />
         </div>
-        <div>
-          <h1>Portfolio terminal</h1>
-          <p>DeFi & Crypto Terminal</p>
-        </div>
+        <h1>Portfolio terminal</h1>
       </div>
     </header>
   );

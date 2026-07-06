@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import type { TransactionEntry } from '@/store/useTransactionStore'
 import { getTokenPriceUSD, getHistoricalTokenPriceUSD } from '@/api/prices'
 import { safeImageUrl, tokenIconUrl } from '@/lib/utils'
+import { CHART_THEME } from '@/lib/chart/indicators'
 
 interface PriceData {
   usdValue: number
@@ -131,7 +132,7 @@ export default function TransactionTable({ txs, onLoadMore, hasMore, loading, ti
         </table>
       </div>
       {hasMore && (
-        <div className="load-more" style={{ display: 'block' }}>
+        <div className="load-more">
           <button onClick={onLoadMore} disabled={loading}>Ver mas</button>
         </div>
       )}
@@ -185,8 +186,8 @@ function TransactionRow({ tx, price, hydrating }: { tx: TransactionEntry; price?
     : ''
 
   const plColor = price
-    ? price.pnl > 0 ? '#1ecb81' : price.pnl < 0 ? '#e74c3c' : '#aaa'
-    : '#aaa'
+    ? price.pnl > 0 ? CHART_THEME.plPositive : price.pnl < 0 ? CHART_THEME.plNegative : CHART_THEME.plNeutral
+    : CHART_THEME.plNeutral
 
   return (
     <tr className="tx-list-row">

@@ -1,11 +1,14 @@
 @media (max-width: 1280px) {
   .main-grid {
-    grid-template-columns: 420px minmax(0, 1fr);
     padding-inline: 14px;
   }
 
-  .crypto-section {
-    grid-template-columns: minmax(0, 1fr) 280px;
+  .market-view {
+    grid-template-columns: 260px minmax(0, 1fr);
+  }
+
+  .wallet-view {
+    grid-template-columns: 380px minmax(0, 1fr);
   }
 }
 
@@ -17,25 +20,37 @@
     gap: 14px;
   }
 
+  .view-tabs {
+    padding-inline: 14px;
+  }
+
+  .market-view {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .market-sidebar {
+    max-height: 360px;
+  }
+
+  .market-chart {
+    min-height: 500px;
+    height: 600px;
+  }
+
   .wallet-section,
-  .crypto-section,
   .transactions-container {
     width: 100%;
     max-width: none;
   }
 
-  .crypto-section {
-    order: -1;
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto auto;
-    grid-template-areas:
-      "search"
-      "chart"
-      "list";
+  .wallet-view {
+    display: flex;
+    flex-direction: column;
   }
 
   #tracked-pairs {
-    max-height: 360px;
+    max-height: 260px;
   }
 }
 
@@ -61,8 +76,9 @@
     min-width: 0;
   }
 
-  #pair-details {
-    height: 620px;
+  .market-chart {
+    min-height: 400px;
+    height: 500px;
   }
 
   .chart-topline,
@@ -99,6 +115,24 @@
     padding: 8px 0;
   }
 
+  .view-tabs button {
+    font-size: 0.82rem;
+    padding: 8px 16px;
+  }
+
+  .market-view {
+    gap: 8px;
+  }
+
+  .market-sidebar {
+    max-height: 300px;
+  }
+
+  .market-chart {
+    min-height: 360px;
+    height: 450px;
+  }
+
   .tracked-pair {
     grid-template-columns: 32px minmax(0, 1fr) auto;
   }
@@ -113,10 +147,6 @@
 
   .pair-stats {
     gap: 6px 10px;
-  }
-
-  #pair-details {
-    height: 560px;
   }
 
   .tx-list-row,

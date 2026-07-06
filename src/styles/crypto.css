@@ -1,28 +1,12 @@
-.crypto-section {
-  grid-area: crypto;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  grid-template-rows: auto minmax(620px, 1fr);
-  grid-template-areas:
-    "chart search"
-    "chart list";
-  align-items: start;
-  gap: 12px;
-  width: 100%;
-  min-width: 0;
-}
-
-.crypto-section > h1 {
-  display: none;
-}
-
+/* Market sidebar — search + tracked pairs */
 #pair-form {
-  grid-area: search;
   display: flex;
   flex-direction: column;
   gap: 8px;
   margin: 0;
+  padding: 0 12px;
   min-width: 0;
+  position: relative;
 }
 
 #pair-search {
@@ -82,16 +66,12 @@
 }
 
 #tracked-pairs {
-  grid-area: list;
   display: flex;
   flex-direction: column;
-  max-height: 760px;
-  min-height: 240px;
+  flex: 1;
+  min-height: 120px;
   margin: 0;
   overflow: hidden auto;
-  background: #0b0d10;
-  border: 1px solid #252a31;
-  border-radius: 8px;
   scrollbar-width: thin;
   scrollbar-color: #313841 transparent;
 }
@@ -249,17 +229,12 @@
 }
 
 #pair-details {
-  grid-area: chart;
   display: flex;
   flex-direction: column;
   min-width: 0;
-  height: 740px;
+  height: 100%;
   margin: 0;
   padding: 0;
-  background: #060708;
-  border: 1px solid #252a31;
-  border-radius: 8px;
-  overflow: hidden;
 }
 
 #pair-details.hidden {
@@ -270,8 +245,8 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  padding: 14px 16px 10px;
+  gap: 12px;
+  padding: 8px 12px 6px;
   background: #080a0d;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
@@ -284,7 +259,7 @@
     "title price"
     "stats stats";
   align-items: baseline;
-  gap: 4px 14px;
+  gap: 2px 12px;
   min-width: 0;
 }
 
@@ -301,7 +276,7 @@
   grid-area: title;
   margin: 0;
   color: #f5f7fa;
-  font-size: 1.28rem;
+  font-size: 1.05rem;
   font-weight: 700;
   line-height: 1.15;
 }
@@ -310,9 +285,9 @@
   grid-area: price;
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 8px;
   color: #f5f7fa;
-  font-size: 1.2rem;
+  font-size: 1rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -346,10 +321,10 @@
   grid-area: stats;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 16px;
-  margin-top: 8px;
+  gap: 4px 12px;
+  margin-top: 4px;
   color: #c7ccd2;
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -413,9 +388,40 @@
 }
 
 .interval-selector button.active,
-.chart-indicator-toggle.active {
+.chart-indicator-toggle.active,
+.indicator-select.active {
   background: #17211f;
   color: #00c087;
+}
+
+.indicator-select {
+  height: 28px;
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #747c86;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2710%27 height=%276%27 fill=%27%23747c86%27%3E%3Cpath d=%27M0 0l5 6 5-6z%27/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  padding-right: 20px;
+  outline: none;
+}
+
+.indicator-select:hover {
+  background-color: #11151a;
+  color: #f5f7fa;
+}
+
+.indicator-select option {
+  background: #0b0d10;
+  color: #f5f7fa;
 }
 
 #chart-wrapper {
