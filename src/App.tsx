@@ -88,6 +88,24 @@ export default function App() {
   }, [currentPair]);
 
   useEffect(() => {
+    const baseTitle = 'DeFi & Crypto Terminal';
+    if (!currentPair) {
+      document.title = baseTitle;
+      return;
+    }
+    const price = lastPrices[currentPair];
+    const pct = stats24h ? parseFloat(stats24h.priceChangePercent) : NaN;
+    if (price == null || !Number.isFinite(price)) {
+      document.title = `${currentPair} | ${baseTitle}`;
+      return;
+    }
+    const arrow = Number.isFinite(pct) ? (pct >= 0 ? '\u25B2' : '\u25BC') : '';
+    const sign = Number.isFinite(pct) ? (pct >= 0 ? '+' : '') : '';
+    const pctText = Number.isFinite(pct) ? `${sign}${pct.toFixed(2)}%` : '';
+    document.title = `${currentPair} ${formatPrice(price)}${arrow ? ' ' + arrow : ''}${pctText ? ' ' + pctText : ''}`;
+  }, [currentPair, lastPrices, stats24h]);
+
+  useEffect(() => {
     migrateAppStorage();
     setTracked(readTrackedPairs());
 
