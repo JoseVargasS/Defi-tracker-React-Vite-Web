@@ -56,6 +56,8 @@ jobs:
           VITE_COINSTATS_API_KEY: ${{ secrets.COINSTATS_API_KEY }}
           VITE_ETH_API: https://api.etherscan.io/v2/api
           VITE_ETH_KEY: ${{ secrets.ETH_KEY }}
+      - name: Debug dist contents
+        run: ls -la dist/ && ls -la dist/assets/
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
