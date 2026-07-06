@@ -57,7 +57,7 @@ jobs:
           VITE_ETH_API: https://api.etherscan.io/v2/api
           VITE_ETH_KEY: ${{ secrets.ETH_KEY }}
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v3
         with:
           path: dist
 
