@@ -1,29 +1,31 @@
 import { Candle, XY } from "./normalize";
+import { COLORS } from "@/lib/config";
 
+// ponytail: canvas cannot read CSS variables, so mirror the :root tokens here as hex/rgba
 export const CHART_THEME = {
-  bg: "#060708",
-  panel: "#0b0d10",
-  grid: "rgba(255, 255, 255, 0.055)",
-  text: "#aeb4bd",
-  muted: "#69707a",
-  up: "#00c087",
-  down: "#f23645",
-  neutral: "#858b93",
-  accent: "#f2c94c",
-  stochK: "#2f80ed",
-  stochD: "#f2994a",
-  stochLevelOver: "rgba(242, 54, 69, 0.35)",
-  stochLevelUnder: "rgba(0, 192, 135, 0.35)",
-  sma: "#f5eef2",
-  ema: "#06b6d4",
-  bbLine: "rgba(242, 201, 76, 0.78)",
-  bbFill: "rgba(242, 201, 76, 0.055)",
-  bbBasis: "rgba(235, 87, 87, 0.7)",
-  volGrid: "rgba(255, 255, 255, 0.035)",
-  stochGrid: "rgba(255, 255, 255, 0.04)",
-  plPositive: "#1ecb81",
-  plNegative: "#e74c3c",
-  plNeutral: "#aaa",
+  bg: COLORS.bg,
+  panel: COLORS.surface1,
+  grid: COLORS.grid,
+  text: COLORS.ink2,
+  muted: COLORS.ink3,
+  up: COLORS.up,
+  down: COLORS.down,
+  neutral: COLORS.neutral,
+  accent: COLORS.accent,
+  stochK: COLORS.stochK,
+  stochD: COLORS.stochD,
+  stochLevelOver: COLORS.stochLevelOver,
+  stochLevelUnder: COLORS.stochLevelUnder,
+  sma: COLORS.sma,
+  ema: COLORS.ema,
+  bbLine: COLORS.bbLine,
+  bbFill: COLORS.bbFill,
+  bbBasis: COLORS.bbBasis,
+  volGrid: COLORS.volGrid,
+  stochGrid: COLORS.stochGrid,
+  plPositive: COLORS.plPositive,
+  plNegative: COLORS.plNegative,
+  plNeutral: COLORS.plNeutral,
   border: "rgba(255, 255, 255, 0.1)",
 };
 
@@ -96,7 +98,7 @@ export function calculateVolumeProfile(data: Candle[], rowCount = 48) {
     return { rows: [], poc: null, maxVolume: 0 };
   }
 
-  const rowsTotal = Math.max(12, Math.min(96, Math.round(rowCount)));
+  const rowsTotal = Math.max(12, Math.min(140, Math.round(rowCount)));
   const rowSize = (maxPrice - minPrice) / rowsTotal;
   const rows = Array.from({ length: rowsTotal }, (_, index) => {
     const low = minPrice + rowSize * index;

@@ -1,6 +1,7 @@
 import type { Chart } from 'chart.js';
 import { CHART_THEME } from '@/lib/chart/indicators';
 import { compactNumber, type Candle } from '@/lib/chart/normalize';
+import { splitPairSymbol } from '@/lib/config';
 import type { EnhancedChart, ScaleLike, ChartDatasetLike, VPRow, CrosshairState } from '@/lib/chart/types';
 
 type ChartPoint = { x: number; y?: number | null; q?: number };
@@ -8,10 +9,8 @@ const asPoints = (data: unknown[]): ChartPoint[] =>
   (data ?? []) as unknown as ChartPoint[];
 
 const getPairMeta = (symbol?: string) => {
-  const s = String(symbol || '').toUpperCase();
-  const knownQuotes = ['USDT', 'USDC', 'FDUSD', 'BTC', 'ETH', 'BNB', 'TRY', 'EUR', 'BRL', 'DAI'];
-  const quote = knownQuotes.find(q => s.endsWith(q)) || '';
-  return { symbol: s, base: quote ? s.slice(0, -quote.length) : s, quote };
+  const { base, quote } = splitPairSymbol(String(symbol || ''));
+  return { symbol: String(symbol || '').toUpperCase(), base, quote };
 };
 
 const lastDefined = (items: { y?: number | null }[]) => {
@@ -93,9 +92,10 @@ const drawValueChip = (
   if (value == null || !Number.isFinite(value) || !scale) return;
   const label = value.toFixed(1);
   const width = Math.max(42, ctx.measureText(label).width + 16);
-  const x = chart.chartArea.right + 4;
+  // ponytail: anchor the chip to the canvas right edge so it never overflows the panel even when the right scale is narrow
+  const x = chart.width - width - 2;
   ctx.save();
-  ctx.fillStyle = '#121820';
+  ctx.fillStyle = 'rgba(16, 14, 12, 0.92)';
   ctx.strokeStyle = color;
   ctx.lineWidth = 1.4;
   ctx.beginPath();
@@ -106,7 +106,7 @@ const drawValueChip = (
   ctx.fillStyle = '#f5f7fa';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = '400 12px Inter, sans-serif';
+  ctx.font = '400 12px -apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif';
   ctx.fillText(label, x + width / 2, y + 11);
   ctx.restore();
 };
@@ -184,7 +184,7 @@ export const crosshairPlugin = {
     ctx.save();
     ctx.strokeStyle = 'rgba(174, 180, 189, 0.55)';
     ctx.lineWidth = 1;
-    ctx.setLineDash([3, 3]);
+    ctx.setLineDash([2, 2]);
     ctx.beginPath();
     ctx.moveTo(chartAny.crosshair.x, chart.chartArea.top);
     ctx.lineTo(chartAny.crosshair.x, chart.chartArea.bottom);
@@ -288,14 +288,14 @@ export const currentPricePlugin = {
     ctx.save();
     ctx.strokeStyle = color;
     ctx.lineWidth = 1;
-    ctx.setLineDash([2, 3]);
+    ctx.setLineDash([1, 2]);
     ctx.beginPath();
     ctx.moveTo(chart.chartArea.left, yPixel);
     ctx.lineTo(chart.chartArea.right, yPixel);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    ctx.font = 'bold 12px Inter, sans-serif';
+    ctx.font = '500 12px Inter, sans-serif';
     const labelWidth = ctx.measureText(label).width + 18;
     const labelHeight = 22;
     // ponytail: tag overlays the rightmost candle so right padding can be 0
@@ -340,7 +340,7 @@ export const indicatorLegendPlugin = {
     const stochScale = chart.scales?.stochRsi;
 
     ctx.save();
-    ctx.font = '700 11px Inter, sans-serif';
+    ctx.font = '500 11px Inter, sans-serif';
     ctx.textBaseline = 'top';
 
     if (isScaleVisible(volumeScale as unknown as ScaleLike)) {
@@ -470,13 +470,20 @@ export const fixedRangeVolumeProfilePlugin = {
       return;
 
     const priceScale = chart.scales?.price;
-    const rawCandles = chart.data.datasets[0]?.data || [];
-    if (!isScaleVisible(priceScale as unknown as ScaleLike) || rawCandles.length < 2) return;
+    const xScale = chart.scales?.x;
+    const rawCandles = (chart.data.datasets[0]?.data as unknown as { x: number }[] | undefined) || [];
+    if (!isScaleVisible(priceScale as unknown as ScaleLike) || !xScale || rawCandles.length < 2) return;
+
+    // ponytail: profile recomputes on every render from the visible X window — zoom and pan reshape it
+    const xMin = xScale.min;
+    const xMax = xScale.max;
+    const visibleCandles = rawCandles.filter((c) => c.x >= xMin && c.x <= xMax);
+    if (visibleCandles.length < 2) return;
 
     const settings = chartAny._volumeProfileSettings || {};
     const profile = calculateVolumeProfile(
-      asPoints(rawCandles) as unknown as Candle[],
-      settings.rows ?? 48,
+      asPoints(visibleCandles) as unknown as Candle[],
+      settings.rows ?? 96,
     );
     if (
       !profile.rows.length ||
@@ -487,20 +494,21 @@ export const fixedRangeVolumeProfilePlugin = {
 
     chartAny._volumeProfile = profile;
     const ctx = chart.ctx;
-    const chartArea = chart.chartArea;
+    const visibleStart = xScale.getPixelForValue(xMin);
+    const visibleEnd = xScale.getPixelForValue(xMax);
     const profileWidth = clamp(
-      Math.round(chartArea.width * (settings.widthRatio ?? 0.28)),
-      settings.minWidth ?? 82,
-      settings.maxWidth ?? 220,
+      Math.round((visibleEnd - visibleStart) * (settings.widthRatio ?? 0.22)),
+      settings.minWidth ?? 72,
+      settings.maxWidth ?? 200,
     );
-    const xRight = chartArea.right - 2;
+    const xRight = visibleEnd - 2;
 
     ctx.save();
     ctx.beginPath();
     ctx.rect(
-      chartArea.left,
+      visibleStart,
       priceScale.top,
-      chartArea.width,
+      visibleEnd - visibleStart,
       priceScale.bottom - priceScale.top,
     );
     ctx.clip();
@@ -522,22 +530,22 @@ export const fixedRangeVolumeProfilePlugin = {
       const isPoc = row === profile.poc;
 
       ctx.fillStyle = isPoc
-        ? 'rgba(242, 201, 76, 0.28)'
-        : 'rgba(236, 84, 125, 0.28)';
+        ? 'rgba(242, 201, 76, 0.30)'
+        : 'rgba(242, 54, 69, 0.32)';
       ctx.fillRect(x, y, downWidth, height);
       ctx.fillStyle = isPoc
-        ? 'rgba(242, 201, 76, 0.36)'
-        : 'rgba(54, 211, 219, 0.32)';
+        ? 'rgba(242, 201, 76, 0.42)'
+        : 'rgba(0, 192, 135, 0.32)';
       ctx.fillRect(x + downWidth, y, upWidth, height);
     });
 
     const pocY = priceScale.getPixelForValue(profile.poc.price);
     ctx.strokeStyle = 'rgba(242, 201, 76, 0.58)';
     ctx.lineWidth = 1.2;
-    ctx.setLineDash([5, 5]);
+    ctx.setLineDash([2, 2]);
     ctx.beginPath();
-    ctx.moveTo(chartArea.left, pocY);
-    ctx.lineTo(chartArea.right, pocY);
+    ctx.moveTo(visibleStart, pocY);
+    ctx.lineTo(visibleEnd, pocY);
     ctx.stroke();
     ctx.restore();
   },
@@ -553,27 +561,29 @@ export const fixedRangeVolumeProfilePlugin = {
 
     const profile = chartAny._volumeProfile;
     const priceScale = chart.scales?.price;
-    if (!profile?.poc || !isScaleVisible(priceScale as unknown as ScaleLike)) return;
+    const xScale = chart.scales?.x;
+    if (!profile?.poc || !isScaleVisible(priceScale as unknown as ScaleLike) || !xScale) return;
 
     const ctx = chart.ctx;
-    const chartArea = chart.chartArea;
+    const visibleStart = xScale.getPixelForValue(xScale.min);
+    const visibleEnd = xScale.getPixelForValue(xScale.max);
     const label = `VP POC ${formatProfilePrice(profile.poc.price)} | ${compactNumber(profile.poc.total)}`;
 
     ctx.save();
-    ctx.font = '400 11px Inter, sans-serif';
+    ctx.font = '400 11px -apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif';
     ctx.textBaseline = 'middle';
     const labelWidth = Math.min(
-      chartArea.width - 16,
+      visibleEnd - visibleStart - 16,
       ctx.measureText(label).width + 18,
     );
     const labelHeight = 22;
     const x = Math.max(
-      chartArea.left + 8,
-      chartArea.right - labelWidth - 8,
+      visibleStart + 8,
+      visibleEnd - labelWidth - 8,
     );
     const y = priceScale.top + 9;
 
-    ctx.fillStyle = 'rgba(8, 10, 12, 0.78)';
+    ctx.fillStyle = 'rgba(16, 14, 12, 0.88)';
     ctx.strokeStyle = 'rgba(242, 201, 76, 0.38)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -607,6 +617,43 @@ function formatProfilePrice(value: number) {
 }
 
 import { calculateVolumeProfile } from '@/lib/chart/indicators';
+
+export const rightScaleBackgroundPlugin = {
+  id: 'rightScaleBackground',
+  beforeDatasetsDraw(chart: Chart) {
+    const ctx = chart.ctx;
+    if (!ctx || !chart.chartArea) return;
+    const priceScale = chart.scales?.price;
+    const volumeScale = chart.scales?.volume;
+    const stochScale = chart.scales?.stochRsi;
+    if (!priceScale) return;
+
+    ctx.save();
+    const baseStyle = ctx.fillStyle;
+    const rightEdge = chart.width;
+
+    // ponytail: subtle vertical strip behind the right scale so prices read as a rail, not as canvas text
+    ctx.fillStyle = 'rgba(16, 14, 12, 0.65)';
+    if (volumeScale) {
+      const y = priceScale.bottom;
+      const h = volumeScale.bottom - y;
+      ctx.fillRect(priceScale.right, y, rightEdge - priceScale.right, h);
+    }
+    if (stochScale) {
+      const y = (volumeScale ?? priceScale).bottom;
+      const h = stochScale.bottom - y;
+      ctx.fillRect(priceScale.right, y, rightEdge - priceScale.right, h);
+    }
+    ctx.fillRect(priceScale.right, priceScale.top, rightEdge - priceScale.right, priceScale.bottom - priceScale.top);
+
+    // hairline separator
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.fillRect(priceScale.right, chart.chartArea.top, 1, chart.chartArea.bottom - chart.chartArea.top);
+
+    ctx.fillStyle = baseStyle;
+    ctx.restore();
+  },
+};
 
 export const measureRangePlugin = {
   id: 'measureRange',
@@ -671,7 +718,7 @@ export const measureRangePlugin = {
     ctx.fillStyle = fill;
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.2;
-    ctx.setLineDash([5, 4]);
+    ctx.setLineDash([2, 2]);
     ctx.fillRect(leftX, topY, width, height);
     ctx.strokeRect(leftX, topY, width, height);
     ctx.setLineDash([]);
@@ -701,7 +748,7 @@ export const measureRangePlugin = {
       priceScale.bottom - 30,
     );
 
-    ctx.fillStyle = 'rgba(8, 10, 12, 0.86)';
+    ctx.fillStyle = 'rgba(16, 14, 12, 0.92)';
     ctx.strokeStyle = color;
     ctx.beginPath();
     if (ctx.roundRect)
@@ -779,7 +826,7 @@ export function createAdvancedTooltipPlugin() {
         : 0;
 
       ctx.save();
-      ctx.fillStyle = 'rgba(8, 10, 12, 0.78)';
+      ctx.fillStyle = 'rgba(16, 14, 12, 0.88)';
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -802,7 +849,7 @@ export function createAdvancedTooltipPlugin() {
       ctx.stroke();
 
       ctx.fillStyle = CHART_THEME.text;
-      ctx.font = '700 11px Inter, sans-serif';
+      ctx.font = '500 11px Inter, sans-serif';
       ctx.textAlign = 'left';
       ctx.fillText(dateStr, tooltipX + 10, tooltipY + 10);
 

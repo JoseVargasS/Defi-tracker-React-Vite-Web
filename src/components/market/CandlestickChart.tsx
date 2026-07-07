@@ -14,11 +14,18 @@ import {
   Tooltip,
   Filler,
 } from 'chart.js';
+import zoomPlugin from 'chartjs-plugin-zoom';
 import 'chartjs-adapter-date-fns';
 import 'chartjs-chart-financial';
 import { fetchKlines } from '@/api/binance';
 import type { Candle, XY, KlineRaw } from '@/lib/chart/normalize';
 import { normalizeKline } from '@/lib/chart/normalize';
+import {
+  CHART_PAGINATION_STEP,
+  CHART_EDGE_THRESHOLD_RATIO,
+  MAX_CHART_BAR_COUNT,
+  intervalBarCount,
+} from '@/lib/config';
 import {
   CHART_THEME,
   calculateBollingerBands,
@@ -34,8 +41,10 @@ import {
   fixedRangeVolumeProfilePlugin,
   measureRangePlugin,
   createAdvancedTooltipPlugin,
+  rightScaleBackgroundPlugin,
 } from '@/lib/chart/plugins';
-import type { EnhancedChart, EventfulCanvas, ChartDatasetLike, MeasurePoint } from '@/lib/chart/types';
+import type { EnhancedChart, ChartDatasetLike, MeasurePoint } from '@/lib/chart/types';
+import type { ChartIndicatorsState } from '@/lib/chart/types';
 
 Chart.register(
   BarController,
@@ -48,16 +57,15 @@ Chart.register(
   CategoryScale,
   Tooltip,
   Filler,
+  zoomPlugin,
 );
-
-import type { ChartIndicatorsState } from '@/lib/chart/types';
 
 export interface CandlestickChartProps {
   symbol: string | null;
   interval: string;
-  zoom: number;
   indicators: ChartIndicatorsState;
   measureActive: boolean;
+  resetSignal: number;
 }
 
 interface TechnicalSeries {
@@ -84,14 +92,6 @@ const timeUnitByInterval = (interval: string) => {
   return 'minute';
 };
 
-const getVisibleWindow = (dataLength: number, zoom: number) => {
-  const minVisible = 24;
-  const z = Math.max(minVisible, Math.min(zoom, dataLength));
-  const end = dataLength;
-  const start = Math.max(0, end - z);
-  return { start, end, zoom: z };
-};
-
 const buildTechnicalSeries = (data: Candle[]): TechnicalSeries => ({
   bands: calculateBollingerBands(data),
   volume: calculateVolume(data),
@@ -103,31 +103,6 @@ const buildTechnicalSeries = (data: Candle[]): TechnicalSeries => ({
   ema: {
     100: calculateEMA(data, 100),
     200: calculateEMA(data, 200),
-  },
-});
-
-const sliceTechnicalSeries = (
-  series: TechnicalSeries,
-  start: number,
-  end: number,
-): TechnicalSeries => ({
-  bands: {
-    upper: series.bands.upper.slice(start, end),
-    middle: series.bands.middle.slice(start, end),
-    lower: series.bands.lower.slice(start, end),
-  },
-  volume: series.volume.slice(start, end),
-  stochRsi: {
-    k: series.stochRsi.k.slice(start, end),
-    d: series.stochRsi.d.slice(start, end),
-  },
-  sma: {
-    100: series.sma[100].slice(start, end),
-    200: series.sma[200].slice(start, end),
-  },
-  ema: {
-    100: series.ema[100].slice(start, end),
-    200: series.ema[200].slice(start, end),
   },
 });
 
@@ -153,7 +128,7 @@ function buildDatasets(
       backgroundColors: CANDLE_COLORS,
       borderColors: CANDLE_COLORS,
       wickColors: CANDLE_COLORS,
-      borderWidth: 1,
+      borderWidth: 0,
       order: 1,
     },
   ];
@@ -166,7 +141,7 @@ function buildDatasets(
         data: series.bands.upper,
         yAxisID: 'price',
         borderColor: CHART_THEME.bbLine,
-        borderWidth: 1.2,
+        borderWidth: 1.1,
         pointRadius: 0,
         fill: false,
         order: 2,
@@ -178,7 +153,7 @@ function buildDatasets(
         yAxisID: 'price',
         borderColor: CHART_THEME.bbLine,
         backgroundColor: CHART_THEME.bbFill,
-        borderWidth: 1.2,
+        borderWidth: 1.1,
         pointRadius: 0,
         fill: '-1',
         order: 2,
@@ -242,7 +217,7 @@ function buildDatasets(
         data: horizontalLevel(candles, 80),
         yAxisID: 'stochRsi',
         borderColor: CHART_THEME.stochLevelOver,
-        borderDash: [4, 4] as [number, number],
+        borderDash: [2, 2] as [number, number],
         borderWidth: 1,
         pointRadius: 0,
         order: 32,
@@ -253,7 +228,7 @@ function buildDatasets(
         data: horizontalLevel(candles, 20),
         yAxisID: 'stochRsi',
         borderColor: CHART_THEME.stochLevelUnder,
-        borderDash: [4, 4] as [number, number],
+        borderDash: [2, 2] as [number, number],
         borderWidth: 1,
         pointRadius: 0,
         order: 33,
@@ -268,7 +243,7 @@ function buildDatasets(
       data: series.sma[indicators.smaPeriod as 100 | 200],
       yAxisID: 'price',
       borderColor: CHART_THEME.sma,
-      borderWidth: 2,
+      borderWidth: 1.6,
       pointRadius: 0,
       fill: false,
       order: 5,
@@ -282,7 +257,7 @@ function buildDatasets(
       data: series.ema[indicators.emaPeriod as 100 | 200],
       yAxisID: 'price',
       borderColor: CHART_THEME.ema,
-      borderWidth: 2,
+      borderWidth: 1.6,
       pointRadius: 0,
       fill: false,
       order: 6,
@@ -302,8 +277,9 @@ function createScales(interval: string, indicators: ChartIndicatorsState) {
         color: CHART_THEME.muted,
         maxRotation: 0,
         autoSkipPadding: 24,
+        font: { size: 10, family: '-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif' },
       },
-      border: { color: CHART_THEME.border },
+      border: { color: CHART_THEME.border, display: false },
     },
     price: {
       type: 'linear' as const,
@@ -311,9 +287,15 @@ function createScales(interval: string, indicators: ChartIndicatorsState) {
       position: 'right' as const,
       stack: PANEL_STACK,
       stackWeight: 5.6,
-      grid: { color: CHART_THEME.grid },
-      ticks: { color: CHART_THEME.text },
-      border: { color: CHART_THEME.border },
+      grid: { color: CHART_THEME.grid, drawTicks: false },
+      ticks: {
+        color: CHART_THEME.text,
+        font: { size: 10, family: '-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif' },
+        padding: 4,
+        maxTicksLimit: 8,
+        crossAlign: 'far',
+      },
+      border: { color: CHART_THEME.border, display: false },
     },
     volume: {
       type: 'linear' as const,
@@ -323,9 +305,11 @@ function createScales(interval: string, indicators: ChartIndicatorsState) {
       stack: PANEL_STACK,
       stackWeight: indicators.volume ? 1.35 : 0,
       beginAtZero: true,
-      grid: { color: CHART_THEME.volGrid },
+      grid: { color: CHART_THEME.volGrid, drawTicks: false },
       ticks: {
         color: CHART_THEME.muted,
+        font: { size: 9, family: '-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif' },
+        padding: 4,
         callback: (value: number) => {
           return Intl.NumberFormat('en', {
             notation: 'compact',
@@ -334,7 +318,7 @@ function createScales(interval: string, indicators: ChartIndicatorsState) {
         },
         maxTicksLimit: 3,
       },
-      border: { color: CHART_THEME.border },
+      border: { color: CHART_THEME.border, display: false },
     },
     stochRsi: {
       type: 'linear' as const,
@@ -345,9 +329,14 @@ function createScales(interval: string, indicators: ChartIndicatorsState) {
       stackWeight: indicators.stochRsi ? 1.55 : 0,
       min: 0,
       max: 100,
-      grid: { color: CHART_THEME.stochGrid },
-      ticks: { color: CHART_THEME.muted, stepSize: 50 },
-      border: { color: CHART_THEME.border },
+      grid: { color: CHART_THEME.stochGrid, drawTicks: false },
+      ticks: {
+        color: CHART_THEME.muted,
+        font: { size: 9, family: '-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif' },
+        padding: 4,
+        stepSize: 50,
+      },
+      border: { color: CHART_THEME.border, display: false },
     },
   };
 }
@@ -360,7 +349,8 @@ const getNearestCandlePoint = (chart: EnhancedChart, x: number, y: number): Meas
   if (y < priceScale.top || y > priceScale.bottom) return null;
 
   let index = 0;
-  let xPixel = xScale.getPixelForValue((candles[0] as unknown as { x: number }).x);
+  const firstX = (candles[0] as unknown as { x: number }).x;
+  let xPixel = xScale.getPixelForValue(firstX);
   let minDistance = Math.abs(x - xPixel);
 
   candles.forEach((candle, candleIndex: number) => {
@@ -385,40 +375,76 @@ const getNearestCandlePoint = (chart: EnhancedChart, x: number, y: number): Meas
 export default function CandlestickChart({
   symbol,
   interval,
-  zoom,
   indicators,
   measureActive,
+  resetSignal,
 }: CandlestickChartProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartInstanceRef = useRef<EnhancedChart | null>(null);
-  const zoomRef = useRef(zoom);
-  const startRef = useRef(0);
   const rawDataRef = useRef<Candle[]>([]);
   const fullSeriesRef = useRef<TechnicalSeries | null>(null);
   const indicatorsRef = useRef(indicators);
   const measureActiveRef = useRef(measureActive);
+  const loadingMoreRef = useRef(false);
 
-  zoomRef.current = zoom;
   indicatorsRef.current = indicators;
   measureActiveRef.current = measureActive;
 
-  const applyChartSlice = useCallback((
-    chart: EnhancedChart | null,
-    data: Candle[],
-    series: TechnicalSeries | null,
-    sym: string,
-    inds: ChartIndicatorsState,
-  ) => {
-    if (!chart || !data.length || !series) return;
-    const currentEnd = Math.min(data.length, startRef.current + zoomRef.current);
-    const visibleData = data.slice(startRef.current, currentEnd);
-    const visibleSeries = sliceTechnicalSeries(series, startRef.current, currentEnd);
-    chart.data.datasets = buildDatasets(sym, visibleData, visibleSeries, inds) as unknown as typeof chart.data.datasets;
-    chart._fullLastTimestamp = data.at(-1)?.x ?? null;
-    chart.update('none');
+  // ponytail: when the user pans or zooms close to the leftmost edge, paginate more history from Binance
+  const maybeLoadMore = useCallback(async (chart: EnhancedChart) => {
+    if (loadingMoreRef.current) return;
+    if (!chart) return;
+    const xScale = chart.scales?.x;
+    const data = chart.data.datasets[0]?.data as unknown as { x: number }[] | undefined;
+    if (!xScale || !data || data.length === 0) return;
+    if (data.length >= MAX_CHART_BAR_COUNT) return;
+
+    const oldestX = data[0].x;
+    const visibleMin = xScale.min;
+    const visibleMax = xScale.max;
+    const visibleRange = visibleMax - visibleMin;
+    if (visibleRange <= 0) return;
+
+    const distance = visibleMin - oldestX;
+    if (distance > visibleRange * CHART_EDGE_THRESHOLD_RATIO) return;
+
+    loadingMoreRef.current = true;
+    try {
+      const symbolKey = chart._symbol;
+      const intervalKey = chart._interval;
+      const newTotal = Math.min(data.length + CHART_PAGINATION_STEP, MAX_CHART_BAR_COUNT);
+      const newRaw = await fetchKlines(symbolKey, intervalKey, newTotal);
+      const newCandles = newRaw.map((k) => normalizeKline(k as unknown as KlineRaw));
+      if (newCandles.length <= data.length) return;
+
+      const newSeries = buildTechnicalSeries(newCandles);
+      rawDataRef.current = newCandles;
+      fullSeriesRef.current = newSeries;
+
+      const oldMin = xScale.min;
+      const oldMax = xScale.max;
+
+      chart.data.datasets = buildDatasets(symbolKey, newCandles, newSeries, chart._indicators) as any;
+      chart.update('none');
+
+      try {
+        chart.zoomScale('x', { min: oldMin, max: oldMax }, 'none');
+      } catch { /* ignore */ }
+    } catch (err) {
+      console.warn('auto-load more klines failed:', err);
+    } finally {
+      loadingMoreRef.current = false;
+    }
   }, []);
 
-  // ponytail: chart creation on symbol change only — interval changes use fast path below
+  useEffect(() => {
+    const chart = chartInstanceRef.current;
+    if (chart && resetSignal > 0) {
+      try { chart.resetZoom('default'); } catch { /* ignore */ }
+    }
+  // ponytail: signal triggers only on bump; do not re-run on other deps
+  }, [resetSignal]);
+
   useEffect(() => {
     if (!symbol) return;
     const canvas = canvasRef.current;
@@ -431,26 +457,17 @@ export default function CandlestickChart({
 
     (async () => {
       try {
-        const raw = (await fetchKlines(symbol, interval)).map((k) =>
-          normalizeKline(k as unknown as KlineRaw),
-        );
+        const fetchCount = intervalBarCount(interval);
+        const raw = (await fetchKlines(symbol, interval, fetchCount))
+          .map((k) => normalizeKline(k as unknown as KlineRaw))
+          .slice(-fetchCount);
         if (destroyed) return;
-
         if (!raw.length) return;
 
-        const fullLastTimestamp = raw.at(-1)?.x ?? null;
         const fullSeries = buildTechnicalSeries(raw);
         const inds = indicatorsRef.current;
         const mActive = measureActiveRef.current;
-        const { start, end, zoom: clampedZoom } = getVisibleWindow(
-          raw.length,
-          zoomRef.current,
-        );
-        const visibleData = raw.slice(start, end);
-        const visibleSeries = sliceTechnicalSeries(fullSeries, start, end);
 
-        startRef.current = start;
-        zoomRef.current = clampedZoom;
         rawDataRef.current = raw;
         fullSeriesRef.current = fullSeries;
 
@@ -459,21 +476,48 @@ export default function CandlestickChart({
 
         const chart = new Chart(ctx, {
           type: 'candlestick',
-          data: { datasets: buildDatasets(symbol, visibleData, visibleSeries, inds) as any },
+          data: { datasets: buildDatasets(symbol, raw, fullSeries, inds) as any },
           options: {
             responsive: true,
             maintainAspectRatio: false,
             animation: false,
             parsing: false,
             interaction: { mode: 'nearest', intersect: false },
-            layout: { padding: 0 },
+            layout: { padding: { top: 4, bottom: 0, left: 4, right: 14 } },
             plugins: {
               legend: { display: false },
               tooltip: { enabled: false },
+              zoom: {
+                pan: {
+                  enabled: !mActive,
+                  mode: 'x',
+                  scaleMode: 'y',
+                  onPanStart: () => !measureActiveRef.current,
+                  onPan: () => !measureActiveRef.current,
+                  onPanComplete: ({ chart: c }) => { void maybeLoadMore(c as EnhancedChart); },
+                },
+                zoom: {
+                  mode: 'x',
+                  scaleMode: 'y',
+                  wheel: {
+                    enabled: !mActive,
+                    speed: 0.12,
+                  },
+                  pinch: { enabled: true },
+                  drag: { enabled: false },
+                  onZoomStart: () => !measureActiveRef.current,
+                  onZoomComplete: ({ chart: c }) => { void maybeLoadMore(c as EnhancedChart); },
+                },
+                limits: {
+                  y: { min: 'original', max: 'original' },
+                  x: { minRange: 6 },
+                },
+              },
             },
             scales: createScales(interval, inds) as any,
           },
           plugins: [
+            rightScaleBackgroundPlugin,
             fixedRangeVolumeProfilePlugin,
             measureRangePlugin,
             crosshairPlugin,
@@ -487,7 +531,7 @@ export default function CandlestickChart({
         Object.assign(enhanced, {
           _symbol: symbol,
           _interval: interval,
-          _fullLastTimestamp: fullLastTimestamp,
+          _fullLastTimestamp: raw.at(-1)?.x ?? null,
           _indicators: { ...inds },
           _measure: { active: mActive, start: null, end: null, preview: null },
           _volumeProfileSettings: {},
@@ -500,44 +544,12 @@ export default function CandlestickChart({
 
         chartInstanceRef.current = enhanced;
 
-        let zoomRafPending = false;
-        const zoomHandler = (event: WheelEvent) => {
-          event.preventDefault();
-          const previousZoom = zoomRef.current;
-          const step = 16;
-          const minVisible = 24;
-          const dataLen = rawDataRef.current.length;
-          zoomRef.current =
-            event.deltaY < 0
-              ? Math.max(minVisible, zoomRef.current - step)
-              : Math.min(dataLen, zoomRef.current + step);
-
-          const currentEnd = Math.min(dataLen, startRef.current + previousZoom);
-          startRef.current = Math.max(
-            0,
-            Math.min(
-              currentEnd - zoomRef.current,
-              dataLen - zoomRef.current,
-            ),
-          );
-
-          if (!zoomRafPending) {
-            zoomRafPending = true;
-            requestAnimationFrame(() => {
-              applyChartSlice(chartInstanceRef.current, rawDataRef.current, fullSeriesRef.current, chartInstanceRef.current?._symbol as string, chartInstanceRef.current?._indicators as ChartIndicatorsState);
-              zoomRafPending = false;
-            });
-          }
-        };
-
-        let isPanning = false;
-        let panStartX = 0;
-        let panStartIndex = startRef.current;
-
-        const handleMeasureClick = (event: PointerEvent) => {
+        // ponytail: measure tool replaces the plugin while active; only one system handles input at a time
+        const downHandler = (event: PointerEvent) => {
+          if (!measureActiveRef.current) return;
           const c = chartInstanceRef.current;
           const m = c?._measure;
-          if (!m?.active || !c) return false;
+          if (!m?.active || !c) return;
 
           const rect = canvas.getBoundingClientRect();
           const point = getNearestCandlePoint(
@@ -545,7 +557,7 @@ export default function CandlestickChart({
             event.clientX - rect.left,
             event.clientY - rect.top,
           );
-          if (!point) return true;
+          if (!point) return;
 
           if (!m.start || m.end) {
             m.start = point;
@@ -555,65 +567,36 @@ export default function CandlestickChart({
             m.end = point;
             m.preview = null;
           }
-
           c.update('none');
-          return true;
-        };
-
-        const downHandler = (event: PointerEvent) => {
-          if (handleMeasureClick(event)) return;
-          isPanning = true;
-          panStartX = event.clientX;
-          panStartIndex = startRef.current;
-          canvas.setPointerCapture?.(event.pointerId);
         };
 
         const moveHandler = (event: PointerEvent) => {
+          if (!measureActiveRef.current) return;
           const c = chartInstanceRef.current;
           const m = c?._measure;
-
-          if (m?.active) {
-            if (c && m.start && !m.end) {
-              const rect = canvas.getBoundingClientRect();
-              m.preview = getNearestCandlePoint(
-                c,
-                event.clientX - rect.left,
-                event.clientY - rect.top,
-              );
-              c.update('none');
-            }
-            return;
+          if (!c || !m?.active) return;
+          if (m.start && !m.end) {
+            const rect = canvas.getBoundingClientRect();
+            m.preview = getNearestCandlePoint(
+              c,
+              event.clientX - rect.left,
+              event.clientY - rect.top,
+            );
+            c.update('none');
           }
-
-          if (!isPanning) return;
-          const moveBars = Math.round(
-            (event.clientX - panStartX) / 6,
-          );
-          startRef.current = Math.max(
-            0,
-            Math.min(
-              rawDataRef.current.length - zoomRef.current,
-              panStartIndex - moveBars,
-            ),
-          );
-          applyChartSlice(chartInstanceRef.current, rawDataRef.current, fullSeriesRef.current, chartInstanceRef.current?._symbol as string, chartInstanceRef.current?._indicators as ChartIndicatorsState);
         };
 
-        const upHandler = (event: PointerEvent) => {
-          isPanning = false;
-          canvas.releasePointerCapture?.(event.pointerId);
+        const dblClickHandler = () => {
+          try { chart.resetZoom('default'); } catch { /* ignore */ }
         };
 
-        (canvas as EventfulCanvas)._zoomHandler = zoomHandler;
-        (canvas as EventfulCanvas)._downHandler = downHandler;
-        (canvas as EventfulCanvas)._moveHandler = moveHandler;
-        (canvas as EventfulCanvas)._upHandler = upHandler;
+        (canvas as any)._downHandler = downHandler;
+        (canvas as any)._moveHandler = moveHandler;
+        (canvas as any)._dblClickHandler = dblClickHandler;
 
-        canvas.addEventListener('wheel', zoomHandler, { passive: false });
         canvas.addEventListener('pointerdown', downHandler);
         canvas.addEventListener('pointermove', moveHandler);
-        canvas.addEventListener('pointerup', upHandler);
-        canvas.addEventListener('pointercancel', upHandler);
+        canvas.addEventListener('dblclick', dblClickHandler);
       } catch (err) {
         if (!destroyed) console.error('CandlestickChart fetch error:', err);
       }
@@ -622,32 +605,23 @@ export default function CandlestickChart({
     return () => {
       destroyed = true;
       if (canvas) {
-        const ec = canvas as EventfulCanvas;
-        if (ec._zoomHandler)
-          ec.removeEventListener('wheel', ec._zoomHandler);
-        if (ec._downHandler)
-          ec.removeEventListener('pointerdown', ec._downHandler);
-        if (ec._moveHandler)
-          ec.removeEventListener('pointermove', ec._moveHandler);
-        if (ec._upHandler) {
-          ec.removeEventListener('pointerup', ec._upHandler);
-          ec.removeEventListener('pointercancel', ec._upHandler);
-        }
-        delete ec._zoomHandler;
+        const ec = canvas as any;
+        if (ec._downHandler) canvas.removeEventListener('pointerdown', ec._downHandler);
+        if (ec._moveHandler) canvas.removeEventListener('pointermove', ec._moveHandler);
+        if (ec._dblClickHandler) canvas.removeEventListener('dblclick', ec._dblClickHandler);
         delete ec._downHandler;
         delete ec._moveHandler;
-        delete ec._upHandler;
+        delete ec._dblClickHandler;
       }
       try { chartInstanceRef.current?.destroy(); } catch { /* ignore */ }
       chartInstanceRef.current = null;
       rawDataRef.current = [];
       fullSeriesRef.current = null;
     };
-  // ponytail: only symbol triggers full chart rebuild, interval uses fast path
+  // ponytail: only symbol triggers full chart rebuild, interval uses fast path below
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol]);
 
-  // ponytail: fast path — interval change updates data in-place without destroying canvas
   useEffect(() => {
     const chart = chartInstanceRef.current;
     if (!chart || !symbol) return;
@@ -655,27 +629,24 @@ export default function CandlestickChart({
     let cancelled = false;
     (async () => {
       try {
-        const raw = (await fetchKlines(symbol, interval)).map((k) =>
-          normalizeKline(k as unknown as KlineRaw),
-        );
+        const fetchCount = intervalBarCount(interval);
+        const raw = (await fetchKlines(symbol, interval, fetchCount))
+          .map((k) => normalizeKline(k as unknown as KlineRaw))
+          .slice(-fetchCount);
         if (cancelled || !raw.length) return;
 
         const fullSeries = buildTechnicalSeries(raw);
-        const { start, end, zoom: clampedZoom } = getVisibleWindow(raw.length, zoomRef.current);
 
         rawDataRef.current = raw;
         fullSeriesRef.current = fullSeries;
-        startRef.current = start;
-        zoomRef.current = clampedZoom;
 
         chart._interval = interval;
         chart._fullLastTimestamp = raw.at(-1)?.x ?? null;
         chart._indicators = { ...indicatorsRef.current };
 
-        const visibleData = raw.slice(start, end);
-        const visibleSeries = sliceTechnicalSeries(fullSeries, start, end);
-        chart.data.datasets = buildDatasets(symbol, visibleData, visibleSeries, indicatorsRef.current) as any;
+        chart.data.datasets = buildDatasets(symbol, raw, fullSeries, indicatorsRef.current) as any;
         chart.options.scales = createScales(interval, indicatorsRef.current) as any;
+        try { chart.resetZoom('default'); } catch { /* ignore */ }
         chart.update('none');
       } catch (err) {
         if (!cancelled) console.error('CandlestickChart interval update error:', err);
@@ -692,9 +663,24 @@ export default function CandlestickChart({
     const fullSeries = fullSeriesRef.current;
     if (!chart || !symbol || !rawData.length || !fullSeries) return;
     chart._indicators = { ...indicators };
+
+    // ponytail: preserve the user's current zoom/pan so toggling an indicator doesn't reset the view
+    const xScale = chart.scales?.x;
+    const oldMin = xScale?.min;
+    const oldMax = xScale?.max;
+    const preserveView =
+      oldMin != null && oldMax != null && Number.isFinite(oldMin) && Number.isFinite(oldMax);
+
     chart.options.scales = createScales(interval, indicators) as any;
-    applyChartSlice(chart, rawData, fullSeries, symbol, indicators);
-  // ponytail: symbol and interval are stable via refs, only indicators trigger rebuild
+    chart.data.datasets = buildDatasets(symbol, rawData, fullSeries, indicators) as any;
+    chart.update('none');
+
+    if (preserveView) {
+      try {
+        chart.zoomScale('x', { min: oldMin as number, max: oldMax as number }, 'none');
+      } catch { /* ignore */ }
+    }
+  // ponytail: symbol/interval stable via refs, only indicators trigger rebuild
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [indicators]);
 
@@ -708,8 +694,14 @@ export default function CandlestickChart({
     chart._measure.start = null;
     chart._measure.end = null;
     chart._measure.preview = null;
+    const zoomOpts: any = chart.options.plugins?.zoom;
+    if (zoomOpts) {
+      if (zoomOpts.pan) zoomOpts.pan.enabled = !measureActive;
+      if (zoomOpts.zoom?.wheel) zoomOpts.zoom.wheel.enabled = !measureActive;
+      if (zoomOpts.zoom?.pinch) zoomOpts.zoom.pinch.enabled = !measureActive;
+    }
     chart.update('none');
-  // ponytail: symbol is stable via ref, only measureActive triggers
+  // ponytail: symbol stable via ref, only measureActive triggers
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [measureActive]);
 

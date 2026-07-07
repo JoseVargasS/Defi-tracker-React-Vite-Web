@@ -1,6 +1,15 @@
 import { makeRequest } from '@/api/client';
-import { BINANCE_API, APP_STORAGE_VERSION } from '@/lib/config';
+import {
+  APP_STORAGE_VERSION,
+  BINANCE_API,
+  DEFAULT_CHART_BAR_COUNT,
+  MAX_CHART_BAR_COUNT,
+  binanceInterval,
+  intervalAggregate,
+} from '@/lib/config';
 import { STORAGE_KEYS } from '@/lib/storage';
+
+const BINANCE_KLINES_MAX = 1000;
 
 export const CACHE_DURATION = 60_000;
 
@@ -8,10 +17,12 @@ const COINS_CACHE_TTL = 24 * 60 * 60 * 1000;
 
 export const _klinesCache = new Map<string, { data: unknown[]; ts: number }>();
 
-function aggregateKlines(rawKlines: unknown[][], groupSize: number): string[][] {
+function aggregateKlinesInPlace(klines: unknown[][], groupSize: number) {
+  if (klines.length === 0) return;
   const aggregated: string[][] = [];
-  for (let i = 0; i < rawKlines.length; i += groupSize) {
-    const chunk = rawKlines.slice(i, i + groupSize);
+  for (let i = 0; i < klines.length; i += groupSize) {
+    const chunk = klines.slice(i, i + groupSize);
+    if (chunk.length === 0) break;
     const openTime = chunk[0][0];
     const closeTime = chunk[chunk.length - 1][6];
     const open = parseFloat(chunk[0][1] as string);
@@ -25,7 +36,7 @@ function aggregateKlines(rawKlines: unknown[][], groupSize: number): string[][] 
       const h = parseFloat(candle[2] as string);
       const l = parseFloat(candle[3] as string);
       if (h > high) high = h;
-      if (l < low) low = l;
+      if (l > low) low = l;
       volume += parseFloat((candle[5] ?? 0) as string);
       quoteVolume += parseFloat((candle[7] ?? 0) as string);
     }
@@ -41,7 +52,8 @@ function aggregateKlines(rawKlines: unknown[][], groupSize: number): string[][] 
       quoteVolume.toString(),
     ]);
   }
-  return aggregated;
+  klines.length = 0;
+  klines.push(...aggregated);
 }
 
 /**
@@ -117,28 +129,38 @@ export async function fetch24hStatsBatch(symbols: string[]): Promise<Binance24hS
 
 /**
  * Fetch klines/candlesticks for a symbol with an in-memory cache (60s TTL).
+ * Paginates via endTime when the requested limit exceeds Binance's per-request cap (1000).
  * Returns array in format:
  * [openTime, open, high, low, close, volume, closeTime, quoteVolume, count, takerBuyVolume, takerBuyQuoteVolume, ignore]
  */
 export async function fetchKlines(symbol: string, interval: string, limit?: number): Promise<unknown[]> {
-  const intervalMap: Record<string, string> = {
-    '3M': '1M', '1M': '1M', '1w': '1w', '5d': '1d',
-    '3d': '3d', '1d': '1d', '12h': '12h', '4h': '4h',
-    '1h': '1h', '15m': '15m', '5m': '5m', '1m': '1m',
-  };
-  const qInterval = intervalMap[interval] || '1d';
-  const cacheKey = `${symbol}-${interval}`;
+  const qInterval = binanceInterval(interval);
+  const totalLimit = Math.min(limit ?? DEFAULT_CHART_BAR_COUNT, MAX_CHART_BAR_COUNT);
+  const cacheKey = `${symbol}-${interval}-${totalLimit}`;
   const now = Date.now();
 
   const cached = _klinesCache.get(cacheKey);
   if (cached && now - cached.ts < CACHE_DURATION) return cached.data;
 
   try {
-    const url = `${BINANCE_API}/klines?symbol=${symbol}&interval=${qInterval}&limit=${limit ?? 1000}`;
-    const res = await makeRequest(url) as unknown[][];
-    let klines = res;
-    if (interval === '3M') klines = aggregateKlines(klines, 3);
-    else if (interval === '5d') klines = aggregateKlines(klines, 5);
+    // ponytail: Binance caps each klines call at 1000, paginate backwards via endTime to extend the visible history
+    const klines: unknown[][] = [];
+    let endTime: number | undefined;
+    let remaining = totalLimit;
+
+    while (remaining > 0) {
+      const batch = Math.min(BINANCE_KLINES_MAX, remaining);
+      const url = `${BINANCE_API}/klines?symbol=${symbol}&interval=${qInterval}&limit=${batch}${endTime ? `&endTime=${endTime}` : ''}`;
+      const res = await makeRequest(url) as unknown[][];
+      if (!Array.isArray(res) || res.length === 0) break;
+      klines.unshift(...res);
+      endTime = Number(res[0][0]) - 1;
+      remaining -= res.length;
+      if (res.length < batch) break;
+    }
+
+    const aggregate = intervalAggregate(interval);
+    if (aggregate) aggregateKlinesInPlace(klines, aggregate);
 
     _klinesCache.set(cacheKey, { data: klines, ts: now });
     return klines;
@@ -149,7 +171,7 @@ export async function fetchKlines(symbol: string, interval: string, limit?: numb
 }
 
 /**
- * Fetch exchange info (trading pairs, filters, etc.).
+ * Fetch exchange info (trading pairs, filters, etc).
  */
 export async function fetchExchangeInfo(): Promise<{ symbols: unknown[] } | null> {
   try {
