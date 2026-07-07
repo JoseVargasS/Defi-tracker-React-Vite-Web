@@ -1,14 +1,14 @@
 @media (max-width: 1280px) {
   .main-grid {
-    padding-inline: 14px;
+    padding-inline: 0;
   }
 
   .market-view {
-    grid-template-columns: 260px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) 200px;
   }
 
   .wallet-view {
-    grid-template-columns: 380px minmax(0, 1fr);
+    grid-template-columns: 320px minmax(0, 1fr);
   }
 }
 
@@ -17,25 +17,29 @@
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 14px;
+    gap: 12px;
+    height: auto;
+    min-height: calc(100dvh - 64px);
   }
 
   .view-tabs {
-    padding-inline: 14px;
+    padding-inline: 8px;
   }
 
   .market-view {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .market-sidebar {
-    max-height: 360px;
+    grid-template-columns: 1fr;
+    grid-template-areas: "chart" "sidebar";
+    height: auto;
+    min-height: 0;
   }
 
   .market-chart {
-    min-height: 500px;
-    height: 600px;
+    height: 60dvh;
+    min-height: 420px;
+  }
+
+  .market-sidebar {
+    max-height: 280px;
   }
 
   .wallet-section,
@@ -47,29 +51,26 @@
   .wallet-view {
     display: flex;
     flex-direction: column;
+    height: auto;
+    overflow: visible;
   }
 
   #tracked-pairs {
-    max-height: 260px;
+    max-height: 220px;
   }
 }
 
 @media (max-width: 768px) {
   #app {
-    padding: 8px;
+    padding: 6px 8px 10px;
   }
 
   .main-logo-title {
-    padding-inline: 8px;
+    padding-inline: 4px;
   }
 
   .main-logo-title h1 {
-    font-size: 1.08rem;
-  }
-
-  .logo-mark {
-    width: 36px;
-    height: 36px;
+    font-size: 0.9rem;
   }
 
   .wallet-section {
@@ -77,28 +78,33 @@
   }
 
   .market-chart {
-    min-height: 400px;
-    height: 500px;
+    height: 56dvh;
+    min-height: 380px;
   }
 
-  .chart-topline,
-  .chart-controls-row {
-    align-items: stretch;
-    flex-direction: column;
+  .market-sidebar {
+    max-height: 240px;
+  }
+
+  .chart-topline {
+    padding: 6px 10px;
   }
 
   .chart-market-summary {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "kicker"
-      "title"
-      "price"
-      "stats";
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
   }
 
-  .indicator-selector {
-    overflow-x: auto;
-    padding-bottom: 2px;
+  .chart-controls-bar {
+    gap: 2px;
+  }
+
+  .interval-selector button,
+  .chart-indicator-toggle {
+    height: 22px;
+    padding: 0 5px;
+    font-size: 0.68rem;
   }
 
   .transactions-container {
@@ -112,48 +118,36 @@
 
 @media (max-width: 480px) {
   .main-grid {
-    padding: 8px 0;
+    padding: 4px 0 6px;
   }
 
   .view-tabs button {
-    font-size: 0.82rem;
-    padding: 8px 16px;
-  }
-
-  .market-view {
-    gap: 8px;
-  }
-
-  .market-sidebar {
-    max-height: 300px;
+    font-size: 0.8rem;
+    padding: 6px 12px;
   }
 
   .market-chart {
-    min-height: 360px;
-    height: 450px;
+    height: 52dvh;
+    min-height: 340px;
   }
 
   .tracked-pair {
-    grid-template-columns: 32px minmax(0, 1fr) auto;
+    grid-template-columns: 22px minmax(0, 1fr) auto;
   }
 
   .tracked-pair .delete-btn {
     display: none;
   }
 
-  .pair-price-group {
-    min-width: 72px;
-  }
-
   .pair-stats {
-    gap: 6px 10px;
+    gap: 4px 10px;
   }
 
   .tx-list-row,
   .tx-list-tags {
     grid-template-columns: 0.75fr 0.9fr 1.2fr 1.1fr;
     gap: 4px;
-    padding: 9px 4px;
+    padding: 8px 4px;
     font-size: 0.74rem;
   }
 

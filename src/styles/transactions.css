@@ -3,61 +3,56 @@
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  gap: 24px;
+  gap: 12px;
   width: 100%;
-  margin-top: 24px;
+  min-width: 0;
 }
 
 .tx-section {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  flex: 1 1 320px;
   min-width: 320px;
   max-width: 600px;
   border-radius: 8px;
 }
 
 .tx-section header {
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 
 .tx-section header h1 {
-  font-size: 1.2rem;
-  font-weight: 600;
-  color: #fff;
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  display: inline-block;
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--ink-1);
+  margin: 0;
+  letter-spacing: -0.01em;
 }
 
 .tx-title {
   margin: 0;
-  font-size: 1.18em;
-  font-weight: 700;
-  color: #fff;
+  font-size: 1.05em;
+  font-weight: 500;
+  color: var(--ink-1);
 }
 
 .tx-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
 }
 
 .tx-content {
-  padding: 8px 8px 8px 8px;
-  background: rgba(22, 24, 32, 0.35);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-radius: 8px;
+  padding: 6px 8px;
+  background: var(--surface-1);
+  border-radius: 10px;
   max-height: 600px;
   overflow-y: auto;
   overflow-x: auto;
   scrollbar-width: thin;
-  scrollbar-color: #353945 transparent;
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  scrollbar-color: var(--surface-3) transparent;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-1);
 }
 
 .tx-content::-webkit-scrollbar {
@@ -65,18 +60,18 @@
 }
 
 .tx-content::-webkit-scrollbar-track {
-  background: #23262f;
+  background: var(--surface-2);
   border-radius: 4px;
 }
 
 .tx-content::-webkit-scrollbar-thumb {
-  background-color: #353945;
+  background-color: var(--surface-3);
   border-radius: 4px;
-  border: 2px solid #23262f;
+  border: 2px solid var(--surface-2);
 }
 
 .tx-content::-webkit-scrollbar-thumb:hover {
-  background-color: #45b26b;
+  background-color: var(--positive);
 }
 
 .tx-detail {
@@ -85,8 +80,8 @@
   overflow-wrap: break-word !important;
   line-height: 1.3;
   margin-top: 2px;
-  font-size: 0.92em;
-  color: #aaa;
+  font-size: 0.9em;
+  color: var(--ink-3);
   margin-top: 1px;
   white-space: normal;
   word-break: break-all;
@@ -94,22 +89,23 @@
 
 .tx-detail.muted,
 .tx-message-cell {
-  color: #888;
+  color: var(--ink-3);
 }
 
 .tx-message-cell {
-  padding: 18px !important;
+  padding: 16px !important;
   text-align: center !important;
 }
 
 .tx-table-styled {
   display: table;
   width: 100%;
-  background: rgba(26, 29, 38, 0.3);
-  border-radius: 12px;
+  background: var(--surface-1);
+  border-radius: 10px;
   overflow: hidden;
-  font-size: 1.05em;
+  font-size: 1em;
   border-collapse: collapse;
+  border: 1px solid var(--border);
 }
 
 .tx-table-styled th,
@@ -120,59 +116,58 @@
 }
 
 .tx-table-styled th {
-  background: linear-gradient(180deg, #1e2129 0%, #181a20 100%);
-  color: #aaa;
-  font-weight: 600;
-  text-transform: uppercase;
-  font-size: 0.85rem;
-  letter-spacing: 0.5px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-weight: 500;
+  font-size: 0.78rem;
+  letter-spacing: 0;
+  border-bottom: 1px solid var(--border);
 }
 
 .tx-table-styled tr {
-  border-bottom: 1px solid #2d313a;
-  transition: background 0.2s;
+  border-bottom: 1px solid var(--border-soft);
+  transition: background 0.12s;
 }
 
 .tx-table-styled tr:hover {
-  background: rgba(69, 178, 107, 0.05);
+  background: var(--positive-soft);
 }
 
 .load-more {
   display: block;
   text-align: center;
   margin-top: 10px;
-  margin-bottom: 32px;
+  margin-bottom: 18px;
 }
 
 .load-more button {
-  background: linear-gradient(135deg, #45b26b 0%, #3772ff 100%);
-  color: #fff;
-  font-weight: 700;
+  background: var(--positive);
+  color: var(--bg);
+  font-weight: 500;
   border: none;
-  border-radius: 12px;
-  padding: 12px 28px;
+  border-radius: 8px;
+  padding: 9px 22px;
   cursor: pointer;
-  font-size: 1em;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(69, 178, 107, 0.3);
+  font-size: 0.88em;
+  transition: background 0.12s, transform 0.12s;
 }
 
 .load-more button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(69, 178, 107, 0.4);
+  background: oklch(0.83 0.155 156);
+  transform: translateY(-1px);
+}
+
+.load-more button:active {
+  transform: translateY(0);
 }
 
 .tx-date-row {
-  font-weight: 700;
-  color: #fff;
-  background: linear-gradient(
-    90deg,
-    rgba(45, 49, 58, 0.8) 0%,
-    transparent 100%
-  );
-  font-size: 1em;
-  padding: 10px 10px 5px 10px;
-  border-top: 1px solid #2d313a;
+  font-weight: 500;
+  color: var(--ink-1);
+  background: var(--surface-2);
+  font-size: 0.92em;
+  padding: 8px 10px 4px 10px;
+  border-top: 1px solid var(--border-soft);
   margin-top: 4px;
 }
 
@@ -183,9 +178,9 @@
   justify-content: start;
   align-items: center;
   gap: 8px;
-  padding: 9px 10px;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-  font-size: 1.05em;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 1em;
   min-width: 0;
   width: 100%;
   box-sizing: border-box;
@@ -196,15 +191,14 @@
 }
 
 .tx-list-tags {
-  font-size: 0.75em;
-  color: #555;
-  font-weight: 600;
+  font-size: 0.72em;
+  color: var(--ink-3);
+  font-weight: 500;
   background: none;
-  border-bottom: 1px solid #2d313a;
+  border-bottom: 1px solid var(--border-soft);
   margin-bottom: 0;
   padding: 4px 10px 4px 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
+  letter-spacing: 0;
 }
 
 .tx-type,
@@ -221,7 +215,7 @@
 
 .tx-token {
   min-width: 70px;
-  font-size: 0.95rem;
+  font-size: 0.93rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -232,11 +226,10 @@
   box-sizing: border-box;
 }
 
-/* Constrain token icons inside transaction rows */
 .tx-token img,
 .tx-icon {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   object-fit: contain;
   border-radius: 50%;
   flex-shrink: 0;
@@ -248,57 +241,58 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  min-width: 22px;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
   border-radius: 50%;
-  background: #2d313a;
-  color: #aaa;
-  font-size: 0.7rem;
-  font-weight: 700;
+  background: var(--surface-3);
+  color: var(--ink-3);
+  font-size: 0.68rem;
+  font-weight: 500;
   flex-shrink: 0;
   margin-right: 6px;
 }
 
 .tx-type {
-  font-weight: 700;
-  color: #1ecb81;
+  font-weight: 500;
+  color: var(--positive);
   min-width: 90px;
   white-space: nowrap;
-  padding: 6px 8px;
+  padding: 5px 7px;
   box-sizing: border-box;
-  text-transform: uppercase;
-  font-size: 0.9rem;
+  text-transform: none;
+  font-size: 0.86rem;
 }
 
 .tx-type.sent {
-  color: #e74c4c;
-  background: rgba(231, 76, 76, 0.1);
-  border-radius: 6px;
+  color: var(--negative);
+  background: var(--negative-soft);
+  border-radius: 5px;
 }
 
 .tx-type.received {
-  background: rgba(69, 178, 107, 0.1);
-  border-radius: 6px;
+  background: var(--positive-soft);
+  border-radius: 5px;
 }
 
 .tx-amount {
-  font-weight: 700;
-  color: #1ecb81;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: rgba(69, 178, 107, 0.05);
+  font-weight: 500;
+  color: var(--positive);
+  padding: 5px 7px;
+  border-radius: 5px;
+  background: var(--positive-soft);
 }
 
 .tx-amount.sent {
-  color: #e74c4c;
-  background: rgba(231, 76, 76, 0.05);
+  color: var(--negative);
+  background: var(--negative-soft);
 }
 
 .tx-usd {
-  font-weight: 700;
-  color: #fff;
+  font-weight: 500;
+  color: var(--ink-1);
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .tx-usd-current {
@@ -306,27 +300,28 @@
 }
 
 .tx-pl-line {
-  font-size: 0.95em;
-  font-weight: 600;
+  font-size: 0.9em;
+  font-weight: 500;
   line-height: 1.2;
+  font-variant-numeric: tabular-nums;
 }
 
 .tx-pl-pct {
-  font-size: 0.85em;
+  font-size: 0.82em;
   line-height: 1.1;
+  font-variant-numeric: tabular-nums;
 }
 
 .tx-pl {
-  font-size: 0.92em;
+  font-size: 0.9em;
   margin-left: 4px;
 }
 
 .tx-time {
-  font-size: 0.72rem;
-  color: #888;
+  font-size: 0.7rem;
+  color: var(--ink-3);
   font-weight: 500;
   margin-top: 2px;
   text-transform: none;
-  letter-spacing: 0.2px;
+  letter-spacing: 0;
 }
-

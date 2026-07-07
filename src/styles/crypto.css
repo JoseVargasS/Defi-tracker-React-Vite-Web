@@ -2,9 +2,9 @@
 #pair-form {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   margin: 0;
-  padding: 0 12px;
+  padding: 0 10px;
   min-width: 0;
   position: relative;
 }
@@ -13,35 +13,35 @@
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
-  padding: 12px 14px;
-  border-radius: 8px;
-  border: 1px solid #252a31;
-  background: #0b0d10;
-  color: #f5f7fa;
-  font-size: 0.92rem;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--ink-1);
+  font-size: 0.78rem;
   font-weight: 500;
   outline: none;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 #pair-search:focus {
-  border-color: rgba(0, 192, 135, 0.72);
-  box-shadow: 0 0 0 3px rgba(0, 192, 135, 0.11);
+  border-color: var(--positive);
+  box-shadow: 0 0 0 2px var(--positive-soft);
 }
 
 #pair-suggestions {
   position: absolute;
-  top: 45px;
-  left: 0;
-  right: 0;
+  top: 32px;
+  left: 10px;
+  right: 10px;
   z-index: 20;
   display: none;
   overflow: hidden auto;
-  max-height: 260px;
-  background: #0b0d10;
-  border: 1px solid #252a31;
+  max-height: 220px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
+  box-shadow: var(--shadow-2);
 }
 
 #pair-suggestions.active {
@@ -49,11 +49,13 @@
 }
 
 #pair-suggestions div {
-  padding: 11px 13px;
-  color: #d8dde3;
-  font-weight: 600;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+  padding: 7px 10px;
+  color: var(--ink-2);
+  font-weight: 500;
+  border-bottom: 1px solid var(--border-soft);
   cursor: pointer;
+  font-size: 0.78rem;
+  transition: background 0.12s, color 0.12s;
 }
 
 #pair-suggestions div:last-child {
@@ -61,40 +63,40 @@
 }
 
 #pair-suggestions div:hover {
-  background: rgba(0, 192, 135, 0.08);
-  color: #fff;
+  background: var(--positive-soft);
+  color: var(--ink-1);
 }
 
 #tracked-pairs {
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: 120px;
+  min-height: 100px;
   margin: 0;
   overflow: hidden auto;
   scrollbar-width: thin;
-  scrollbar-color: #313841 transparent;
+  scrollbar-color: var(--surface-3) transparent;
 }
 
 #tracked-pairs::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
 
 #tracked-pairs::-webkit-scrollbar-thumb {
-  background: #313841;
+  background: var(--surface-3);
   border-radius: 999px;
 }
 
 .tracked-pair {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto 28px;
+  grid-template-columns: 22px minmax(0, 1fr) auto 20px;
   align-items: center;
-  gap: 10px;
-  min-height: 58px;
-  padding: 9px 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+  gap: 6px;
+  min-height: 38px;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border-soft);
   cursor: pointer;
-  transition: background 0.16s ease, border-color 0.16s ease;
+  transition: background 0.12s;
 }
 
 .tracked-pair:last-child {
@@ -102,17 +104,17 @@
 }
 
 .tracked-pair:hover {
-  background: #11151a;
+  background: var(--surface-2);
 }
 
 .coin-icon {
-  width: 34px;
-  height: 34px;
+  width: 22px;
+  height: 22px;
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: #151a20;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
   overflow: hidden;
 }
 
@@ -128,9 +130,9 @@
   height: 100%;
   display: grid;
   place-items: center;
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: #747c86;
+  font-size: 0.66rem;
+  font-weight: 500;
+  color: var(--ink-3);
   text-transform: uppercase;
 }
 
@@ -143,10 +145,10 @@
 .coin-symbol {
   display: flex;
   align-items: baseline;
-  gap: 3px;
-  color: #f5f7fa;
-  font-size: 0.96rem;
-  font-weight: 700;
+  gap: 2px;
+  color: var(--ink-1);
+  font-size: 0.78rem;
+  font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -154,72 +156,69 @@
 
 .coin-symbol-suffix,
 .coin-name {
-  color: #747c86;
-  font-weight: 600;
+  color: var(--ink-3);
+  font-weight: 400;
 }
 
 .coin-symbol-suffix {
-  font-size: 0.76rem;
+  font-size: 0.62rem;
 }
 
 .coin-name {
-  margin-top: 2px;
-  font-size: 0.78rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: none;
 }
 
 .pair-price-group {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 2px;
-  min-width: 82px;
+  gap: 0;
+  min-width: 0;
 }
 
 .pair-price {
-  color: #f5f7fa;
-  font-size: 0.94rem;
-  font-weight: 700;
+  color: var(--ink-1);
+  font-size: 0.76rem;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
 .pair-change {
-  color: #9aa3ad;
-  font-size: 0.78rem;
-  font-weight: 700;
+  color: var(--ink-3);
+  font-size: 0.66rem;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
 .pair-change.positive,
 #pair-price .positive {
-  color: #00c087;
+  color: var(--positive);
 }
 
 .pair-change.negative,
 #pair-price .negative {
-  color: #f23645;
+  color: var(--negative);
 }
 
 .delete-btn {
-  width: 28px;
-  height: 28px;
+  width: 20px;
+  height: 20px;
   display: grid;
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
-  color: #5d6670;
-  font-size: 1rem;
-  font-weight: 700;
+  color: var(--ink-4);
+  font-size: 0.78rem;
+  font-weight: 500;
   cursor: pointer;
+  transition: color 0.12s, background 0.12s;
 }
 
 .delete-btn:hover {
-  background: rgba(242, 54, 69, 0.13);
-  color: #f23645;
+  background: var(--negative-soft);
+  color: var(--negative);
 }
 
 .chart-canvas {
@@ -244,192 +243,198 @@
 .chart-topline {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
   gap: 12px;
-  padding: 8px 12px 6px;
-  background: #080a0d;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 5px 12px;
+  background: var(--surface-1);
+  border-bottom: 1px solid var(--border-soft);
+  min-height: 36px;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
 }
 
 .chart-market-summary {
-  display: grid;
-  grid-template-columns: auto auto;
-  grid-template-areas:
-    "kicker kicker"
-    "title price"
-    "stats stats";
-  align-items: baseline;
-  gap: 2px 12px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   min-width: 0;
-}
-
-.chart-kicker {
-  grid-area: kicker;
-  color: #747c86;
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  flex: 1 1 auto;
 }
 
 #pair-title {
-  grid-area: title;
   margin: 0;
-  color: #f5f7fa;
-  font-size: 1.05rem;
-  font-weight: 700;
-  line-height: 1.15;
+  color: var(--ink-1);
+  font-size: 0.95rem;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
 }
 
 #pair-price {
-  grid-area: price;
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  color: #f5f7fa;
-  font-size: 1rem;
-  font-weight: 700;
+  gap: 5px;
+  color: var(--ink-1);
+  font-size: 0.88rem;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
 #pair-price strong {
-  font-size: 0.86rem;
-}
-
-#close-details {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  background: #11151a;
-  color: #9aa3ad;
-  font-size: 1rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-#close-details:hover {
-  border-color: rgba(242, 54, 69, 0.45);
-  color: #f23645;
+  font-size: 0.88rem;
+  font-weight: 500;
 }
 
 .pair-stats {
-  grid-area: stats;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 12px;
-  margin-top: 4px;
-  color: #c7ccd2;
-  font-size: 0.72rem;
+  gap: 2px 12px;
+  color: var(--ink-2);
+  font-size: 0.7rem;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
+  flex-basis: 100%;
+  margin-top: 1px;
 }
 
 .pair-stats > div {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .pair-stats .label {
-  color: #69707a;
-  font-size: 0.76rem;
-  font-weight: 700;
+  color: var(--ink-3);
+  font-weight: 400;
 }
 
-.chart-controls-row {
+/* Controls bar — inline on the right of the topline */
+.chart-controls-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 12px;
-  background: #080a0d;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 3px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  min-height: 0;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+}
+
+.chart-controls-sep {
+  display: inline-block;
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 4px;
+  flex: 0 0 auto;
 }
 
 .interval-selector,
 .indicator-selector {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 1px;
   min-width: 0;
-}
-
-.interval-selector {
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.interval-selector::-webkit-scrollbar {
-  display: none;
+  flex: 0 0 auto;
 }
 
 .interval-selector button,
 .chart-indicator-toggle {
-  height: 28px;
+  height: 22px;
   flex: 0 0 auto;
-  padding: 0 9px;
+  padding: 0 6px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
-  color: #747c86;
-  font-size: 0.78rem;
-  font-weight: 700;
+  color: var(--ink-3);
+  font-size: 0.7rem;
+  font-weight: 500;
   cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
 }
 
 .interval-selector button:hover,
 .chart-indicator-toggle:hover {
-  background: #11151a;
-  color: #f5f7fa;
+  background: var(--surface-2);
+  color: var(--ink-1);
 }
 
 .interval-selector button.active,
 .chart-indicator-toggle.active,
 .indicator-select.active {
-  background: #17211f;
-  color: #00c087;
+  background: var(--positive-soft);
+  color: var(--positive);
 }
 
 .indicator-select {
-  height: 28px;
+  height: 22px;
   flex: 0 0 auto;
   padding: 0 6px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
-  color: #747c86;
-  font-size: 0.78rem;
-  font-weight: 700;
+  color: var(--ink-3);
+  font-size: 0.7rem;
+  font-weight: 500;
   cursor: pointer;
   appearance: none;
   -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2710%27 height=%276%27 fill=%27%23747c86%27%3E%3Cpath d=%27M0 0l5 6 5-6z%27/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2710%27 height=%276%27 fill=%27%2366707a%27%3E%3Cpath d=%27M0 0l5 6 5-6z%27/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 6px center;
-  padding-right: 20px;
+  padding-right: 16px;
   outline: none;
+  transition: background-color 0.12s, color 0.12s;
 }
 
 .indicator-select:hover {
-  background-color: #11151a;
-  color: #f5f7fa;
+  background-color: var(--surface-2);
+  color: var(--ink-1);
 }
 
 .indicator-select option {
-  background: #0b0d10;
-  color: #f5f7fa;
+  background: var(--surface-2);
+  color: var(--ink-1);
+}
+
+.chart-tool-button {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 0.74rem;
+  font-weight: 500;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition: background 0.12s, color 0.12s;
+}
+
+.chart-tool-button:hover {
+  background: var(--surface-2);
+  color: var(--ink-1);
+}
+
+.chart-tool-button.active {
+  background: var(--positive-soft);
+  color: var(--positive);
 }
 
 #chart-wrapper {
   position: relative;
   flex: 1 1 auto;
-  min-height: 520px;
+  min-height: 0;
   width: 100%;
-  background: #060708;
+  background: var(--bg);
+  overflow: hidden;
+  cursor: crosshair;
 }
 
 #chart-wrapper .chart-canvas {
@@ -439,43 +444,13 @@
   height: 100% !important;
 }
 
-.chart-tool-button {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 2;
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
-  background: rgba(8, 10, 12, 0.86);
-  color: #9aa3ad;
-  font-size: 0.82rem;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.chart-tool-button:hover {
-  border-color: rgba(0, 192, 135, 0.48);
-  color: #f5f7fa;
-}
-
-.chart-tool-button.active {
-  background: rgba(0, 192, 135, 0.14);
-  border-color: rgba(0, 192, 135, 0.62);
-  color: #00c087;
-}
-
 #candlestick-chart {
   position: absolute;
   inset: 0;
   width: 100% !important;
   height: 100% !important;
   display: block;
-  background: #060708;
+  background: var(--bg);
   touch-action: none;
 }
 
