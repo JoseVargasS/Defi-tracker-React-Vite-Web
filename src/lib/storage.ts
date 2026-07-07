@@ -1,15 +1,11 @@
-import { APP_STORAGE_VERSION, DEFAULT_TRACKED_PAIRS } from '@/lib/config';
+import { APP_STORAGE_VERSION, DEFAULT_TRACKED_PAIRS, PAIR_SYMBOL_RE, WALLET_ADDRESS_RE } from '@/lib/config';
 
 export const STORAGE_KEYS = {
   version: 'defiTrackerStorageVersion',
   trackedPairs: 'trackedPairs',
   coinsListCache: 'coinsListCache',
   savedWallets: 'savedWallets',
-  walletAutoFetchDisabled: 'walletAutoFetchDisabled',
 } as const;
-
-const WALLET_RE = /^0x[a-fA-F0-9]{40}$/;
-const PAIR_RE = /^[A-Z0-9]{3,30}$/;
 
 export function readSavedWallets(): string[] {
   try {
@@ -21,7 +17,7 @@ export function readSavedWallets(): string[] {
       ...new Set(
         parsed.filter(
           (wallet: unknown) =>
-            typeof wallet === 'string' && WALLET_RE.test(wallet)
+            typeof wallet === 'string' && WALLET_ADDRESS_RE.test(wallet)
         )
       ),
     ];
@@ -34,7 +30,7 @@ export function writeSavedWallets(wallets: string[]): string[] {
   const cleanWallets = [
     ...new Set(
       (wallets || []).filter(
-        (wallet) => typeof wallet === 'string' && WALLET_RE.test(wallet)
+        (wallet) => typeof wallet === 'string' && WALLET_ADDRESS_RE.test(wallet)
       )
     ),
   ];
@@ -53,7 +49,7 @@ function sanitizePairs(pairs: string[]): string[] {
     ...new Set(
       pairs
         .map((p) => (typeof p === 'string' ? p.toUpperCase() : ''))
-        .filter((p) => PAIR_RE.test(p))
+        .filter((p) => PAIR_SYMBOL_RE.test(p))
     ),
   ];
   return clean.length ? clean : [...DEFAULT_TRACKED_PAIRS];
@@ -80,7 +76,6 @@ export function migrateAppStorage(): void {
   if (localStorage.getItem(STORAGE_KEYS.version) !== APP_STORAGE_VERSION) {
     localStorage.removeItem(STORAGE_KEYS.trackedPairs);
     localStorage.removeItem(STORAGE_KEYS.coinsListCache);
-    localStorage.setItem(STORAGE_KEYS.walletAutoFetchDisabled, '1');
   }
 
   writeSavedWallets(readSavedWallets());
