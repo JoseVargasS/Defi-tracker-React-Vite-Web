@@ -1,26 +1,24 @@
 import { useCallback, useEffect } from 'react';
 import { useWalletStore } from '@/store/useWalletStore';
 import { readSavedWallets, writeSavedWallets, clearAppStorage } from '@/lib/storage';
-import { ETH_API, ETH_KEY, HAS_COINSTATS_CONFIG, HAS_ETHERSCAN_CONFIG, SUPPORTED_CHAINS } from '@/lib/config';
+import {
+  BINANCE_API,
+  CHAIN_FALLBACKS,
+  ETH_API,
+  ETH_KEY,
+  HAS_COINSTATS_CONFIG,
+  HAS_ETHERSCAN_CONFIG,
+  STABLE_PRICES,
+  SUPPORTED_CHAINS,
+  WALLET_ADDRESS_RE,
+  WALLET_BALANCE_CONCURRENCY,
+} from '@/lib/config';
+import { TOKEN_ICON_FALLBACKS } from '@/lib/assets';
 import { makeRequest } from '@/api/client';
-import { safeErrorMessage, mapWithConcurrency, integerAmountToNumber, TOKEN_ICON_FALLBACKS } from '@/lib/utils';
+import { safeErrorMessage, mapWithConcurrency, integerAmountToNumber } from '@/lib/utils';
 import { getTokenAssetsByAddress } from '@/api/coinstats';
 import type { EtherscanTokenTx } from '@/api/etherscan';
 import { WalletDashboard } from './WalletDashboard';
-
-const BALANCE_CONCURRENCY = 1;
-
-const CHAIN_FALLBACKS: Record<string, { chainId: number; nativeSymbol: string; nativeName: string }> = {
-  ethereum: { chainId: 1, nativeSymbol: 'ETH', nativeName: 'Ethereum' },
-  'base-wallet': { chainId: 8453, nativeSymbol: 'ETH', nativeName: 'Ethereum' },
-  binancesmartchain: { chainId: 56, nativeSymbol: 'BNB', nativeName: 'BNB' },
-};
-
-const STABLE_PRICES: Record<string, number> = {
-  USDT: 1, USDC: 1, USD0: 1, DAI: 1,
-};
-
-const WALLET_RE = /^0x[a-fA-F0-9]{40}$/;
 
 async function getFallbackTokenPrice(symbol: string): Promise<number | null> {
   const normalized = symbol.toUpperCase();
@@ -28,7 +26,7 @@ async function getFallbackTokenPrice(symbol: string): Promise<number | null> {
   if (normalized === 'ETH' || normalized === 'BNB') {
     try {
       const res = await makeRequest(
-        `${import.meta.env.VITE_BINANCE_API || 'https://api.binance.com/api/v3'}/ticker/price?symbol=${normalized}USDT`
+        `${BINANCE_API}/ticker/price?symbol=${normalized}USDT`
       ) as { price: string };
       const price = Number.parseFloat(res.price);
       return Number.isFinite(price) && price > 0 ? price : null;
@@ -140,7 +138,7 @@ async function fetchChainBalances(address: string, chain: { id: string; name: st
 async function fetchWalletAssets(address: string): Promise<{ assets: import('@/store/useWalletStore').WalletAsset[]; totalWorth: number }> {
   const chainResults = await mapWithConcurrency(
     [...SUPPORTED_CHAINS],
-    BALANCE_CONCURRENCY,
+    WALLET_BALANCE_CONCURRENCY,
     chain => fetchChainBalances(address, chain)
   );
 
@@ -185,7 +183,7 @@ export function WalletSection() {
   }, [setSavedWallets]);
 
   const handleSave = useCallback(() => {
-    if (!WALLET_RE.test(address)) {
+    if (!WALLET_ADDRESS_RE.test(address)) {
       setError('Direccion invalida. Debe ser 0x seguido de 40 caracteres hex.');
       return;
     }
@@ -218,7 +216,7 @@ export function WalletSection() {
   }, [setSavedWallets, setAddress, setAssets, setError]);
 
   const doSearch = useCallback(async (wallet: string) => {
-    if (!WALLET_RE.test(wallet)) {
+    if (!WALLET_ADDRESS_RE.test(wallet)) {
       setError('Direccion invalida. Debe ser 0x seguido de 40 caracteres hex.');
       return;
     }
@@ -242,7 +240,7 @@ export function WalletSection() {
   }, [setLoading, setError, setAssets]);
 
   const handleSearch = useCallback(async () => {
-    if (!WALLET_RE.test(address)) {
+    if (!WALLET_ADDRESS_RE.test(address)) {
       setError('Direccion invalida. Debe ser 0x seguido de 40 caracteres hex.');
       return;
     }

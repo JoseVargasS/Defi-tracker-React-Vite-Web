@@ -26,21 +26,7 @@ import { useMarketStore } from '@/store/useMarketStore';
 import { fetch24hStats } from '@/api/binance';
 import { formatPrice } from '@/lib/utils';
 import { compactNumber } from '@/lib/chart/normalize';
-
-const INTERVALS = [
-  { key: '3M', label: '3M' },
-  { key: '1M', label: '1M' },
-  { key: '1w', label: '1w' },
-  { key: '5d', label: '5D' },
-  { key: '3d', label: '3D' },
-  { key: '1d', label: '1D' },
-  { key: '12h', label: '12H' },
-  { key: '4h', label: '4H' },
-  { key: '1h', label: '1H' },
-  { key: '15m', label: '15m' },
-  { key: '5m', label: '5m' },
-  { key: '1m', label: '1m' },
-] as const;
+import { APP_NAME, CHART_INTERVALS, splitPairSymbol } from '@/lib/config';
 
 interface Stats24h {
   priceChange: string;
@@ -57,17 +43,15 @@ export default function App() {
   const setTracked = useMarketStore((s) => s.setTracked);
   const currentPair = useMarketStore((s) => s.currentPair);
   const currentInterval = useMarketStore((s) => s.currentInterval);
-  const chartZoom = useMarketStore((s) => s.chartZoom);
   const chartIndicators = useMarketStore((s) => s.chartIndicators);
-  const chartMeasure = useMarketStore((s) => s.chartMeasure);
-  const setChartMeasureActive = useMarketStore((s) => s.setChartMeasureActive);
-  const setCurrentPair = useMarketStore((s) => s.setCurrentPair);
   const setCurrentInterval = useMarketStore((s) => s.setCurrentInterval);
   const setChartIndicator = useMarketStore((s) => s.setChartIndicator);
   const setSmaPeriod = useMarketStore((s) => s.setSmaPeriod);
   const setEmaPeriod = useMarketStore((s) => s.setEmaPeriod);
   const lastPrices = useMarketStore((s) => s.lastPrices);
   const [stats24h, setStats24h] = useState<Stats24h | null>(null);
+  const [chartResetSignal, setChartResetSignal] = useState(0);
+  const [measureActive, setMeasureActive] = useState(false);
 
   useEffect(() => {
     if (!currentPair) { setStats24h(null); return; }
@@ -88,18 +72,15 @@ export default function App() {
   }, [currentPair]);
 
   useEffect(() => {
-    const baseTitle = 'DeFi & Crypto Terminal';
     if (!currentPair) {
-      document.title = baseTitle;
+      document.title = APP_NAME;
       return;
     }
-    const knownQuotes = ['USDT', 'USDC', 'FDUSD', 'BTC', 'ETH', 'BNB', 'TRY', 'EUR', 'BRL', 'DAI'];
-    const quote = knownQuotes.find((q) => currentPair.endsWith(q));
-    const base = quote ? currentPair.slice(0, -quote.length) : currentPair;
+    const { base } = splitPairSymbol(currentPair);
     const price = lastPrices[currentPair];
     const pct = stats24h ? parseFloat(stats24h.priceChangePercent) : NaN;
     if (price == null || !Number.isFinite(price)) {
-      document.title = `${base} | ${baseTitle}`;
+      document.title = `${base} | ${APP_NAME}`;
       return;
     }
     const arrow = Number.isFinite(pct) ? (pct >= 0 ? '\u25B2' : '\u25BC') : '';
@@ -185,19 +166,11 @@ export default function App() {
       </nav>
       <main className={`main-grid view-${activeView}`}>
         <section className="market-view">
-          <aside className="market-sidebar">
-            <div className="market-sidebar-header">
-              <h1>Mercado spot</h1>
-            </div>
-            <PairSearch />
-            <TrackedPairs />
-          </aside>
           <div className="market-chart" id="pair-details">
             {currentPair ? (
               <>
                 <div className="chart-topline">
                   <div className="chart-market-summary">
-                    <span className="chart-kicker">Spot</span>
                     <h3 id="pair-title">{currentPair}</h3>
                     {stats24h && (
                       <div id="pair-price">
@@ -209,93 +182,107 @@ export default function App() {
                     )}
                     {stats24h && (
                       <div className="pair-stats">
-                        <div><span className="label">24h cambio</span> {parseFloat(stats24h.priceChange) >= 0 ? '+' : ''}{parseFloat(stats24h.priceChange).toFixed(4)} ({parseFloat(stats24h.priceChangePercent) >= 0 ? '+' : ''}{parseFloat(stats24h.priceChangePercent).toFixed(2)}%)</div>
+                        <div><span className="label">24h</span> {parseFloat(stats24h.priceChange) >= 0 ? '+' : ''}{parseFloat(stats24h.priceChange).toFixed(4)}</div>
                         <div><span className="label">Max</span> {stats24h.highPrice.toLocaleString()}</div>
                         <div><span className="label">Min</span> {stats24h.lowPrice.toLocaleString()}</div>
                         <div><span className="label">Vol</span> {compactNumber(stats24h.quoteVolume)}</div>
                       </div>
                     )}
                   </div>
-                  <button id="close-details" type="button" onClick={() => setCurrentPair(null)} aria-label="Cerrar panel">x</button>
-                </div>
-                <div className="chart-controls-row">
-                  <div className="interval-selector" role="radiogroup" aria-label="Intervalos de velas">
-                    {INTERVALS.map((iv) => (
-                      <button
-                        key={iv.key}
-                        type="button"
-                        className={currentInterval === iv.key ? 'active' : undefined}
-                        onClick={() => setCurrentInterval(iv.key)}
-                      >
-                        {iv.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="indicator-selector" aria-label="Indicadores tecnicos">
-                    {([
-                      { key: 'bollinger' as const, label: 'BB' },
-                      { key: 'volume' as const, label: 'VOL' },
-                      { key: 'volumeProfile' as const, label: 'VP' },
-                      { key: 'stochRsi' as const, label: 'Stoch RSI' },
-                    ]).map((ind) => (
-                      <button
-                        key={ind.key}
-                        type="button"
-                        className={`chart-indicator-toggle${chartIndicators[ind.key] ? ' active' : ''}`}
-                        onClick={() => setChartIndicator(ind.key, !chartIndicators[ind.key])}
-                      >
-                        {ind.label}
-                      </button>
-                    ))}
-                    <select
-                      className={`indicator-select${chartIndicators.smaEnabled ? ' active' : ''}`}
-                      value={smaSelectValue}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (v === '') { setChartIndicator('smaEnabled', false); return; }
-                        handleSmaPeriod(e);
-                        setChartIndicator('smaEnabled', true);
-                      }}
-                      aria-label="SMA periodo"
+                  <div className="chart-controls-bar" role="toolbar" aria-label="Controles del chart">
+                    <button
+                      type="button"
+                      className="chart-tool-button"
+                      title="Reset zoom (doble click)"
+                      aria-label="Restablecer zoom del chart"
+                      onClick={() => setChartResetSignal((n) => n + 1)}
                     >
-                      <option value="">SMA</option>
-                      <option value="200">SMA 200</option>
-                      <option value="100">SMA 100</option>
-                    </select>
-                    <select
-                      className={`indicator-select${chartIndicators.emaEnabled ? ' active' : ''}`}
-                      value={emaSelectValue}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (v === '') { setChartIndicator('emaEnabled', false); return; }
-                        handleEmaPeriod(e);
-                        setChartIndicator('emaEnabled', true);
-                      }}
-                      aria-label="EMA periodo"
-                    >
-                      <option value="">EMA</option>
-                      <option value="200">EMA 200</option>
-                      <option value="100">EMA 100</option>
-                    </select>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <path d="M3 12a9 9 0 1 0 3-6.7"/>
+                        <path d="M3 4v5h5"/>
+                      </svg>
+                    </button>
+                    <span className="chart-controls-sep" aria-hidden />
+                    <div className="interval-selector" role="radiogroup" aria-label="Intervalos de velas">
+                      {CHART_INTERVALS.map((iv) => (
+                        <button
+                          key={iv.key}
+                          type="button"
+                          className={currentInterval === iv.key ? 'active' : undefined}
+                          onClick={() => setCurrentInterval(iv.key)}
+                        >
+                          {iv.label}
+                        </button>
+                      ))}
+                    </div>
+                    <span className="chart-controls-sep" aria-hidden />
+                    <div className="indicator-selector" aria-label="Indicadores tecnicos">
+                      {([
+                        { key: 'bollinger' as const, label: 'BB' },
+                        { key: 'volume' as const, label: 'VOL' },
+                        { key: 'volumeProfile' as const, label: 'VP' },
+                        { key: 'stochRsi' as const, label: 'Stoch RSI' },
+                      ]).map((ind) => (
+                        <button
+                          key={ind.key}
+                          type="button"
+                          className={`chart-indicator-toggle${chartIndicators[ind.key] ? ' active' : ''}`}
+                          onClick={() => setChartIndicator(ind.key, !chartIndicators[ind.key])}
+                        >
+                          {ind.label}
+                        </button>
+                      ))}
+                      <select
+                        className={`indicator-select${chartIndicators.smaEnabled ? ' active' : ''}`}
+                        value={smaSelectValue}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (v === '') { setChartIndicator('smaEnabled', false); return; }
+                          handleSmaPeriod(e);
+                          setChartIndicator('smaEnabled', true);
+                        }}
+                        aria-label="SMA periodo"
+                      >
+                        <option value="">SMA</option>
+                        <option value="200">SMA 200</option>
+                        <option value="100">SMA 100</option>
+                      </select>
+                      <select
+                        className={`indicator-select${chartIndicators.emaEnabled ? ' active' : ''}`}
+                        value={emaSelectValue}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (v === '') { setChartIndicator('emaEnabled', false); return; }
+                          handleEmaPeriod(e);
+                          setChartIndicator('emaEnabled', true);
+                        }}
+                        aria-label="EMA periodo"
+                      >
+                        <option value="">EMA</option>
+                        <option value="200">EMA 200</option>
+                        <option value="100">EMA 100</option>
+                      </select>
+                      <span className="chart-controls-sep" aria-hidden />
+                      <button
+                        type="button"
+                        className={`chart-tool-button${measureActive ? ' active' : ''}`}
+                        title="Medir rango"
+                        aria-label="Medir rango de precio"
+                        aria-pressed={measureActive}
+                        onClick={() => setMeasureActive((v) => !v)}
+                      >
+                        %
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <div id="chart-wrapper">
-                  <button
-                    type="button"
-                    className={`chart-tool-button${chartMeasure.active ? ' active' : ''}`}
-                    title="Medir rango"
-                    aria-label="Medir rango de precio"
-                    aria-pressed={chartMeasure.active}
-                    onClick={() => setChartMeasureActive(!chartMeasure.active)}
-                  >
-                    %
-                  </button>
                   <CandlestickChart
                     symbol={currentPair}
                     interval={currentInterval}
-                    zoom={chartZoom}
                     indicators={chartIndicators}
-                    measureActive={chartMeasure.active}
+                    measureActive={measureActive}
+                    resetSignal={chartResetSignal}
                   />
                 </div>
               </>
@@ -310,6 +297,13 @@ export default function App() {
               </div>
             )}
           </div>
+          <aside className="market-sidebar" aria-label="Lista de pares">
+            <div className="market-sidebar-header">
+              <h1>Mercado spot</h1>
+            </div>
+            <PairSearch />
+            <TrackedPairs />
+          </aside>
         </section>
         <section className="wallet-view">
           <WalletSection />

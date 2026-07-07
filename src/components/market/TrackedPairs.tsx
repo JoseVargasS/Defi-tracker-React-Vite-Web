@@ -3,43 +3,8 @@ import { useMarketStore } from '@/store/useMarketStore';
 import { fetchPriceBatch, fetch24hStatsBatch } from '@/api/binance';
 import { useInterval } from '@/hooks/useInterval';
 import { formatPrice, safeImageUrl } from '@/lib/utils';
-
-const names: Record<string, string> = {
-  BTC: 'BTC', ETH: 'ETH', USDT: 'Tether', BNB: 'BNB', SOL: 'Solana',
-  ADA: 'Cardano', XRP: 'XRP', DOGE: 'Dogecoin', MATIC: 'Polygon',
-  TRX: 'TRON', LINK: 'Chainlink', LTC: 'Litecoin', DOT: 'Polkadot',
-  SHIB: 'Shiba Inu', USDC: 'USD Coin', AVAX: 'Avalanche', OP: 'Optimism',
-  ARB: 'Arbitrum', PEPE: 'Pepe',
-};
-
-const ICON_MAP: Record<string, string> = {
-  BTC: 'https://cryptologos.cc/logos/bitcoin-btc-logo.png',
-  ETH: 'https://cryptologos.cc/logos/ethereum-eth-logo.png',
-  BNB: 'https://cryptologos.cc/logos/bnb-bnb-logo.png',
-  SOL: 'https://cryptologos.cc/logos/solana-sol-logo.png',
-  ADA: 'https://cryptologos.cc/logos/cardano-ada-logo.png',
-  XRP: 'https://cryptologos.cc/logos/xrp-xrp-logo.png',
-  DOGE: 'https://cryptologos.cc/logos/dogecoin-doge-logo.png',
-  MATIC: 'https://cryptologos.cc/logos/polygon-matic-logo.png',
-  DOT: 'https://cryptologos.cc/logos/polkadot-new-dot-logo.png',
-  LINK: 'https://cryptologos.cc/logos/chainlink-link-logo.png',
-  LTC: 'https://cryptologos.cc/logos/litecoin-ltc-logo.png',
-  TRX: 'https://cryptologos.cc/logos/tron-trx-logo.png',
-  SHIB: 'https://cryptologos.cc/logos/shiba-inu-shib-logo.png',
-  AVAX: 'https://cryptologos.cc/logos/avalanche-avax-logo.png',
-  USDC: 'https://cryptologos.cc/logos/usd-coin-usdc-logo.png',
-  USDT: 'https://cryptologos.cc/logos/tether-usdt-logo.png',
-  PEPE: 'https://cryptologos.cc/logos/pepe-pepe-logo.png',
-  ARB: 'https://cryptologos.cc/logos/arbitrum-arb-logo.png',
-  OP: 'https://cryptologos.cc/logos/optimism-op-logo.png',
-  BAT: 'https://cryptologos.cc/logos/basic-attention-token-bat-logo.png',
-};
-
-const getBase = (symbol: string): string => {
-  const knownQuotes = ['USDT', 'USDC', 'FDUSD', 'BTC', 'ETH', 'BNB', 'TRY', 'EUR', 'BRL', 'DAI'];
-  const quote = knownQuotes.find((q) => symbol.endsWith(q)) || '';
-  return quote ? symbol.slice(0, -quote.length) : symbol;
-};
+import { COIN_ICON_URLS, coinDisplayName } from '@/lib/assets';
+import { TRACKED_PAIRS_POLL_MS, splitPairSymbol } from '@/lib/config';
 
 export function TrackedPairs() {
   const tracked = useMarketStore((s) => s.tracked);
@@ -65,8 +30,8 @@ export function TrackedPairs() {
       useMarketStore.setState((state) => ({
         lastPrices: { ...state.lastPrices, ...nextPrices },
       }));
+      setPrices((prev) => ({ ...prev, ...nextPrices }));
     }
-    setPrices((prev) => ({ ...prev, ...nextPrices }));
     const nextChanges: Record<string, string> = {};
     for (const s of statsRes) {
       const pct = parseFloat(s.priceChangePercent || '0');
@@ -75,12 +40,11 @@ export function TrackedPairs() {
     setChanges(nextChanges);
   }, []);
 
-  // ponytail: fire once on mount and every time tracked list changes so prices appear instantly
   useEffect(() => {
     poll();
   }, [poll, tracked]);
 
-  useInterval(poll, 5000);
+  useInterval(poll, TRACKED_PAIRS_POLL_MS);
 
   const setCurrentPair = useMarketStore((s) => s.setCurrentPair);
 
@@ -98,20 +62,21 @@ export function TrackedPairs() {
   );
 
   const iconUrl = (base: string) => {
-    const url = ICON_MAP[base];
+    const url = COIN_ICON_URLS[base];
     return url ? safeImageUrl(url) : '';
   };
 
   return (
     <div id="tracked-pairs">
       {tracked.map((symbol) => {
-        const base = getBase(symbol);
-        const name = names[base] || base;
+        const { base, quote } = splitPairSymbol(symbol);
+        const name = coinDisplayName(base);
         const price = prices[symbol];
         const formatted = price ? formatPrice(price) : '-';
         const change = changes[symbol] ?? '';
         const changeClass = change.startsWith('+') ? 'positive' : change.startsWith('-') ? 'negative' : '';
-        const fallback = !ICON_MAP[base];
+        const fallback = !COIN_ICON_URLS[base];
+        const suffix = quote ? '/' + quote : '';
 
         return (
           <div key={symbol} className="tracked-pair" onClick={handleClick(symbol)}>
@@ -125,7 +90,7 @@ export function TrackedPairs() {
             <div className="coin-info">
               <span className="coin-symbol">
                 {symbol}
-                <span className="coin-symbol-suffix">/{getBase(symbol) !== symbol ? 'USD' : ''}</span>
+                <span className="coin-symbol-suffix">{suffix}</span>
               </span>
               <span className="coin-name">{name}</span>
             </div>
