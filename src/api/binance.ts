@@ -133,6 +133,22 @@ export async function fetch24hStatsBatch(symbols: string[]): Promise<Binance24hS
  * Returns array in format:
  * [openTime, open, high, low, close, volume, closeTime, quoteVolume, count, takerBuyVolume, takerBuyQuoteVolume, ignore]
  */
+/**
+ * Fetch only the latest 1-2 klines bypassing the in-memory cache.
+ * Used for real-time chart polling — always fetches fresh data.
+ */
+export async function fetchLatestKlines(symbol: string, interval: string, limit: number = 2): Promise<unknown[][]> {
+  const qInterval = binanceInterval(interval);
+  const url = `${BINANCE_API}/klines?symbol=${symbol}&interval=${qInterval}&limit=${limit}`;
+  try {
+    const res = await makeRequest(url);
+    return Array.isArray(res) ? res as unknown[][] : [];
+  } catch (err) {
+    console.warn('fetchLatestKlines error', symbol, err);
+    return [];
+  }
+}
+
 export async function fetchKlines(symbol: string, interval: string, limit?: number): Promise<unknown[]> {
   const qInterval = binanceInterval(interval);
   const totalLimit = Math.min(limit ?? DEFAULT_CHART_BAR_COUNT, MAX_CHART_BAR_COUNT);

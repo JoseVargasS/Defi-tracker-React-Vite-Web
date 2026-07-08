@@ -17,7 +17,7 @@ import {
 import zoomPlugin from 'chartjs-plugin-zoom';
 import 'chartjs-adapter-date-fns';
 import 'chartjs-chart-financial';
-import { fetchKlines } from '@/api/binance';
+import { fetchKlines, fetchLatestKlines } from '@/api/binance';
 import type { Candle, XY, KlineRaw } from '@/lib/chart/normalize';
 import { normalizeKline } from '@/lib/chart/normalize';
 import {
@@ -25,6 +25,7 @@ import {
   CHART_EDGE_THRESHOLD_RATIO,
   MAX_CHART_BAR_COUNT,
   intervalBarCount,
+  intervalAggregate,
 } from '@/lib/config';
 import {
   CHART_THEME,
@@ -704,6 +705,47 @@ export default function CandlestickChart({
   // ponytail: symbol stable via ref, only measureActive triggers
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [measureActive]);
+
+  // ponytail: real-time poll every 5s — only fetches 1-2 klines, patches last candle in-place
+  // skip aggregated intervals (5d, 3M) since Binance raw klines don't match the aggregation
+  useEffect(() => {
+    if (!symbol) return;
+    if (intervalAggregate(interval)) return;
+
+    const id = setInterval(async () => {
+      const chart = chartInstanceRef.current;
+      const rawData = rawDataRef.current;
+      if (!chart || !rawData.length) return;
+
+      try {
+        const raw = await fetchLatestKlines(symbol, interval, 2);
+        if (!raw.length) return;
+
+        const binCandle = normalizeKline(raw[raw.length - 1] as unknown as KlineRaw);
+        const lastLocal = rawData[rawData.length - 1];
+        if (!lastLocal) return;
+
+        if (binCandle.x === lastLocal.x) {
+          Object.assign(lastLocal, binCandle);
+        } else if (binCandle.x > lastLocal.x) {
+          const prev = raw.length > 1 ? normalizeKline(raw[0] as unknown as KlineRaw) : null;
+          if (prev && prev.x === lastLocal.x) Object.assign(lastLocal, prev);
+          rawData.push(binCandle);
+          const maxBars = intervalBarCount(interval);
+          if (rawData.length > maxBars + 1) rawData.shift();
+        } else {
+          return;
+        }
+
+        const series = buildTechnicalSeries(rawData);
+        fullSeriesRef.current = series;
+        chart.data.datasets = buildDatasets(symbol, rawData, series, indicatorsRef.current) as any;
+        chart.update('none');
+      } catch { /* silent */ }
+    }, 5000);
+
+    return () => clearInterval(id);
+  }, [symbol, interval]);
 
   return (
     <canvas
