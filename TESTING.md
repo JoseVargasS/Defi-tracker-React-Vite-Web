@@ -10,10 +10,10 @@ npm run test:coverage    # con coverage v8
 
 Cobertura actual en `src/__tests__/unit/`:
 
-- `utils.test.ts` — `formatPrice`, `safeImageUrl`, `safeErrorMessage`, `escapeHTML`, `concurrencyLimit`.
-- `storage.test.ts` — `sanitizePairs`, `readSavedWallets`, versionado de `localStorage`.
+- `utils.test.ts` — `formatPrice`, `escapeHTML`, `safeImageUrl`, `safeErrorMessage`, `apiStatusMessage`, `mapWithConcurrency`.
+- `storage.test.ts` — `readSavedWallets`, `writeSavedWallets`, `readTrackedPairs`, `writeTrackedPairs`, `STORAGE_KEYS`, versionado por `APP_STORAGE_VERSION`.
 - `normalize.test.ts` — `normalizeKline`, `compactNumber`.
-- `indicators.test.ts` — Bollinger, Stoch RSI, Volume, Volume Profile.
+- `indicators.test.ts` — `calculateVolume`, `calculateBollingerBands`, `calculateStochRSI`, `calculateVolumeProfile`, `CHART_THEME`.
 
 Cuando agregues logica nueva:
 
@@ -23,24 +23,13 @@ Cuando agregues logica nueva:
 
 ## E2E (Playwright)
 
-```bash
-npm run test:e2e
-```
-
-Configuracion en `playwright.config.ts`. Para iterar contra el dev server: `npm run dev` en una terminal, tests en otra.
+`npm run test:e2e` esta declarado en `package.json` pero no hay `playwright.config.ts` ni specs en el repo todavia. Agrega la config y los specs bajo `e2e/` o `tests/` cuando habilites esta capa; mientras tanto, no correr el script.
 
 ## CI
 
-`.github/workflows/deploy-pages.yml` corre en cada push/PR a `main` o `master`:
+`.github/workflows/deploy-pages.yml` corre en cada push a `main`/`master` (y manual con `workflow_dispatch`) con cuatro jobs encadenados: `lint` -> `test` -> `build` -> `deploy`. Pasos relevantes: `npm ci`, `npm run lint`, `npm run typecheck`, `npm run test:coverage`, `npm run build` con `VITE_COINSTATS_API_KEY` y `VITE_ETH_KEY` desde secrets, y `actions/upload-pages-artifact` + `actions/deploy-pages` para el deploy.
 
-1. `npm ci`
-2. `npm run lint`
-3. `npm run typecheck`
-4. `npm run test:coverage`
-5. `npm run build` con secrets `COINSTATS_API_KEY` y `ETH_KEY` como `VITE_*`
-6. Deploy a GitHub Pages.
-
-El job de CI tambien existe en `.github/ci.yml` como duplicado minimo (lint + typecheck + test + build) para PR checks si Pages no aplica.
+`.github/ci.yml` existe como pipeline minimo (lint + typecheck + test + build) en push/PR para PR checks rapidos sin deploy.
 
 ## Smoke checks manuales
 

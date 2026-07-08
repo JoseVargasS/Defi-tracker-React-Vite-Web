@@ -60,14 +60,22 @@ src/
 │   ├── config.ts               Endpoints, chains, defaults
 │   ├── utils.ts                formatPrice, escapeHTML, safeImageUrl, etc
 │   ├── storage.ts              localStorage helpers
+│   ├── assets.ts               COIN_ICON_URLS por simbolo
 │   └── chart/
 │       ├── normalize.ts        normalizeKline, compactNumber
-│       ├── indicators.ts       Bollinger, StochRSI, Volume, RSI, VP
+│       ├── indicators.ts       Bollinger, StochRSI, RSI, Volume, VP, SMA, EMA
+│       ├── types.ts            EnhancedChart, ScaleLike, VPRow, etc.
 │       └── plugins/index.ts    Crosshair, currentPrice, legend, VRVP, measure
 ├── store/
 │   ├── useMarketStore.ts       Zustand: pares, chart, precios
 │   ├── useWalletStore.ts       Zustand: wallet, assets, chains
-│   └── useTransactionStore.ts  Zustand: txs ETH/Base
+│   └── useTransactionStore.ts  Solo exporta interface TransactionEntry
+├── hooks/
+│   └── useInterval.ts          setInterval con cleanup y flag immediate
+├── components/
+│   └── ErrorBoundary.tsx       Fallback UI en main.tsx
+├── test/
+│   └── setup.ts                Setup de Vitest (jsdom, jest-dom)
 ├── styles/
 │   ├── index.css               @import de todos los CSS
 │   ├── general.css             Layout global, header, grid
@@ -120,16 +128,18 @@ Calculos en `src/lib/chart/indicators.ts`:
 
 `src/api/prices.ts`:
 
-- Caches en `useMarketStore`: `pricesCache`, `historicalChartCache`, `coinLookupCache`
-- `getTokenPriceUSD`, `getHistoricalTokenPriceUSD` retornan `number | null`
+- Sin cache propio: cada llamada pega a Binance `*/USDT` y cae a CoinStats si no hay par.
+- `STABLE_PRICES` local para `USDT/USDC/USD0/DAI` (siempre 1).
+- `getTokenPriceUSD`, `getHistoricalTokenPriceUSD` retornan `number | null`.
+- `src/api/binance.ts` mantiene `_klinesCache` (60s TTL) para velas y la lista de monedas de `exchangeInfo` en `localStorage` con versionado por `APP_STORAGE_VERSION`.
 
 ## Estado
 
 Zustand stores en `src/store/`:
 
-- `useMarketStore`: `tracked`, `currentPair`, `currentInterval`, `chartZoom`, `chartIndicators`, `chartsCache`
-- `useWalletStore`: `address`, `savedWallets`, `assets`, `totalWorth`
-- `useTransactionStore`: `ethTxs`, `baseTxs`, paginacion
+- `useMarketStore`: `activeView`, `tracked`, `currentPair`, `currentInterval`, `chartIndicators`, `lastPrices`, `coinsList`.
+- `useWalletStore`: `address`, `savedWallets`, `loading`, `error`, `assets`, `totalWorth`.
+- `useTransactionStore`: solo exporta el tipo `TransactionEntry`. La lista paginada y `loading` viven como `useState` dentro de `TransactionSection` (paginacion de 10 en 10, `ChainState.all/offset/loading`).
 
 ## CSS
 

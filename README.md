@@ -5,10 +5,10 @@ App web para consultar balances de wallets EVM, revisar transacciones en Ethereu
 ## Stack
 
 - React 19 + TypeScript 5.8 + Vite 6
-- Chart.js + `chartjs-chart-financial` + `chartjs-adapter-date-fns`
+- Chart.js + `chartjs-chart-financial` + `chartjs-adapter-date-fns` + `chartjs-plugin-zoom`
 - Zustand para estado global
 - Vitest para tests unitarios
-- Playwright para E2E
+- Playwright declarado en `package.json` (sin specs todavia)
 - APIs: Binance Spot, Etherscan v2, CoinStats Open API
 
 ## Comandos
@@ -45,13 +45,14 @@ CSP definida en `index.html`: limita scripts/estilos/conexiones a origines conoc
 
 ```text
 src/
-  api/         cliente HTTP, Binance, CoinStats, Etherscan, precios
-  components/  layout, market (pares, velas), wallet, transactions
-  hooks/       hooks compartidos
-  lib/         config, utils, storage, chart (normalize, indicators, plugins)
-  store/       stores Zustand: market, wallet, transactions
-  styles/      CSS por dominio
-  __tests__/unit/  tests Vitest
+  api/              cliente HTTP, Binance, CoinStats, Etherscan, precios
+  components/       ErrorBoundary + layout, market, wallet, transactions
+  hooks/            useInterval
+  lib/              config, utils, storage, assets, chart (normalize, indicators, types, plugins)
+  store/            stores Zustand: market, wallet, transactions (este solo tipos)
+  test/             setup de Vitest (jsdom, jest-dom)
+  styles/           CSS por dominio
+  __tests__/unit/   tests Vitest
 ```
 
 Detalles de archivos, reglas de edicion y arquitectura de la grafica: ver `AGENTS.md`.
