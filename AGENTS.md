@@ -175,3 +175,23 @@ Si se toca grafica:
 Si se toca transacciones:
 - probar wallet con actividad Ethereum y Base
 - confirmar USD/P&L se actualizan sin duplicar filas
+
+## Commits
+
+El mensaje debe ser entendible para alguien no tecnico. Formato:
+
+```
+<tipo>(<ambito>): <descripcion clara en español>
+
+- <archivo.ts>: <que se cambio y por que>
+- <otro.ts>: <que se cambio y por que>
+- <explicacion del comportamiento>
+```
+
+Reglas:
+- `tipo` conventional commit (feat, fix, refactor, etc.)
+- descripcion: menos de 72 chars, en español, clara para no tecnicos
+- body: solo guiones, sin lineas de encabezado como "archivos:" o "cambios:"
+- cada bullet en una sola linea (sin wrap)
+- nombre de archivo sin ruta (ej. `binance.ts`, no `src/api/binance.ts`)
+- explicar el comportamiento, no el como interno

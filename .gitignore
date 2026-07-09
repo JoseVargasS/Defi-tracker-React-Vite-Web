@@ -10,3 +10,4 @@ test-results/
 images/
 *.tsbuildinfo
 skills-lock.json
+.mimocode/
