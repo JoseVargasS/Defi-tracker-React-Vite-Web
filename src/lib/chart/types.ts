@@ -14,8 +14,8 @@ export type IndicatorColorKey =
 
 export type IndicatorColors = Record<IndicatorColorKey, string>;
 
-export const SMA_PERIOD_OPTIONS = [20, 40, 50, 75, 100, 150, 200] as const;
-export const EMA_PERIOD_OPTIONS = [20, 40, 50, 75, 100, 150, 200] as const;
+export const SMA_PERIOD_OPTIONS = [40, 50, 75, 100, 150, 200] as const;
+export const EMA_PERIOD_OPTIONS = [40, 50, 75, 100, 150, 200] as const;
 
 export interface ChartIndicatorsState {
   bollinger: boolean;

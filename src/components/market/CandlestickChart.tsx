@@ -88,8 +88,12 @@ interface TechnicalSeries {
 const smaCache = new Map<string, XY[]>();
 const emaCache = new Map<string, XY[]>();
 
+function getDataFingerprint(data: Candle[]): string {
+  return `${data[0]?.x ?? 0}-${data[data.length - 1]?.x ?? 0}`;
+}
+
 function getSmaSeries(data: Candle[], period: number): XY[] {
-  const key = `${data.length}-${period}`;
+  const key = `${getDataFingerprint(data)}-${data.length}-${period}`;
   const hit = smaCache.get(key);
   if (hit) return hit;
   const out = calculateSMA(data, period);
@@ -97,7 +101,7 @@ function getSmaSeries(data: Candle[], period: number): XY[] {
   return out;
 }
 function getEmaSeries(data: Candle[], period: number): XY[] {
-  const key = `${data.length}-${period}`;
+  const key = `${getDataFingerprint(data)}-${data.length}-${period}`;
   const hit = emaCache.get(key);
   if (hit) return hit;
   const out = calculateEMA(data, period);
@@ -121,14 +125,18 @@ const timeUnitByInterval = (interval: string) => {
   return "minute";
 };
 
-const buildTechnicalSeries = (data: Candle[]): TechnicalSeries => ({
-  bands: calculateBollingerBands(data),
-  volume: calculateVolume(data),
-  stochRsi: calculateStochRSI(data),
-  rsi: [],
-  sma: {},
-  ema: {},
-});
+const buildTechnicalSeries = (data: Candle[]): TechnicalSeries => {
+  smaCache.clear();
+  emaCache.clear();
+  return {
+    bands: calculateBollingerBands(data),
+    volume: calculateVolume(data),
+    stochRsi: calculateStochRSI(data),
+    rsi: [],
+    sma: {},
+    ema: {},
+  };
+};
 
 const horizontalLevel = (candles: Candle[], value: number): XY[] =>
   candles.map((item) => ({ x: item.x, y: value }));
