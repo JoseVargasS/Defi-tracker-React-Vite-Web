@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { ZeroValueToggle } from './ZeroValueToggle';
 import type { WalletAsset } from '@/store/useWalletStore';
-import { safeImageUrl, tokenIconUrl } from '@/lib/utils';
+import { safeImageUrl } from '@/lib/utils';
+import { tokenIconUrl } from '@/lib/assets';
 
 const SPECIAL_SYMBOLS = ['USUAL', 'USUALX', 'USD0', 'BIO'];
 

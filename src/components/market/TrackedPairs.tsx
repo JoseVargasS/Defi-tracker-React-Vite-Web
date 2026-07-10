@@ -9,8 +9,7 @@ import { TRACKED_PAIRS_POLL_MS, splitPairSymbol } from '@/lib/config';
 export function TrackedPairs() {
   const tracked = useMarketStore((s) => s.tracked);
   const removeTracked = useMarketStore((s) => s.removeTracked);
-  const [prices, setPrices] = useState<Record<string, number>>({});
-  const [changes, setChanges] = useState<Record<string, string>>({});
+  const [marketData, setMarketData] = useState<{ prices: Record<string, number>; changes: Record<string, string> }>({ prices: {}, changes: {} });
 
   const poll = useCallback(async () => {
     const symbols = useMarketStore.getState().tracked;
@@ -30,14 +29,16 @@ export function TrackedPairs() {
       useMarketStore.setState((state) => ({
         lastPrices: { ...state.lastPrices, ...nextPrices },
       }));
-      setPrices((prev) => ({ ...prev, ...nextPrices }));
     }
     const nextChanges: Record<string, string> = {};
     for (const s of statsRes) {
       const pct = parseFloat(s.priceChangePercent || '0');
       nextChanges[s.symbol] = pct > 0 ? `+${pct.toFixed(2)}%` : `${pct.toFixed(2)}%`;
     }
-    setChanges(nextChanges);
+    setMarketData((prev) => ({
+      prices: Object.keys(nextPrices).length ? { ...prev.prices, ...nextPrices } : prev.prices,
+      changes: nextChanges,
+    }));
   }, []);
 
   useEffect(() => {
@@ -71,9 +72,9 @@ export function TrackedPairs() {
       {tracked.map((symbol) => {
         const { base, quote } = splitPairSymbol(symbol);
         const name = coinDisplayName(base);
-        const price = prices[symbol];
+        const price = marketData.prices[symbol];
         const formatted = price ? formatPrice(price) : '-';
-        const change = changes[symbol] ?? '';
+        const change = marketData.changes[symbol] ?? '';
         const changeClass = change.startsWith('+') ? 'positive' : change.startsWith('-') ? 'negative' : '';
         const fallback = !COIN_ICON_URLS[base];
         const suffix = quote ? '/' + quote : '';

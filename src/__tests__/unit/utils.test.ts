@@ -6,7 +6,6 @@ import {
   safeErrorMessage,
   apiStatusMessage,
   mapWithConcurrency,
-  tokenIconUrl,
   integerAmountToNumber,
 } from '@/lib/utils';
 
@@ -178,32 +177,6 @@ describe('mapWithConcurrency', () => {
   it('handles empty array', async () => {
     const results = await mapWithConcurrency([], 5, async (n) => n);
     expect(results).toEqual([]);
-  });
-});
-
-describe('tokenIconUrl', () => {
-  it('returns empty string for empty input', () => {
-    expect(tokenIconUrl('')).toBe('');
-    // @ts-expect-error testing null edge case
-    expect(tokenIconUrl(null)).toBe('');
-    // @ts-expect-error testing undefined edge case
-    expect(tokenIconUrl(undefined)).toBe('');
-  });
-
-  it('returns fallback URL for known symbols', () => {
-    const url = tokenIconUrl('ETH');
-    expect(url).toBe('/images/Eth-icon-purple.png');
-  });
-
-  it('falls back to CDN for unknown symbols', () => {
-    const url = tokenIconUrl('XYZ');
-    expect(url).toContain('cdn.jsdelivr.net');
-    expect(url).toContain('xyz.png');
-  });
-
-  it('normalizes to uppercase', () => {
-    const url = tokenIconUrl('eth');
-    expect(url).toBe('/images/Eth-icon-purple.png');
   });
 });
 

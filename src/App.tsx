@@ -28,6 +28,7 @@ import { fetch24hStats } from '@/api/binance';
 import { formatPrice } from '@/lib/utils';
 import { compactNumber } from '@/lib/chart/normalize';
 import { APP_NAME, CHART_INTERVALS, BINANCE_NATIVE_INTERVALS, splitPairSymbol } from '@/lib/config';
+import { SMA_PERIOD_OPTIONS } from '@/lib/chart/types';
 
 interface Stats24h {
   priceChange: string;
@@ -172,7 +173,7 @@ export default function App() {
     return () => document.removeEventListener("mousedown", handler);
   }, [colorPickerOpen]);
 
-  const ALLOWED_PERIODS = [40, 50, 75, 100, 150, 200];
+  const ALLOWED_PERIODS = SMA_PERIOD_OPTIONS as readonly number[];
 
   const handleSmaPeriod = (e: ChangeEvent<HTMLSelectElement>) => {
     const v = Number(e.target.value);

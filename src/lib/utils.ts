@@ -73,25 +73,6 @@ export async function mapWithConcurrency<T, R>(
   return results;
 }
 
-export const TOKEN_ICON_FALLBACKS: Record<string, string> = {
-  USUAL: 'https://static.coinstats.app/coins/usual-usdE9O.png',
-  USUALX: 'https://static.coinstats.app/coins/usualx8Xz.png',
-  USD0: 'https://static.coinstats.app/coins/usual-usdE9O.png',
-  BIO: 'https://assets.coingecko.com/coins/images/51761/large/bio.png',
-  ETH: '/images/Eth-icon-purple.png',
-  BNB: 'https://assets.coingecko.com/coins/images/825/large/binance-coin-logo.png',
-  USDC: 'https://assets.coingecko.com/coins/images/6319/large/USD_Coin_icon.png',
-  USDT: 'https://assets.coingecko.com/coins/images/325/large/Tether.png',
-  SOL: 'https://assets.coingecko.com/coins/images/4128/large/solana.png',
-};
-
-export function tokenIconUrl(symbol: string): string {
-  const sym = String(symbol || '').toUpperCase().trim();
-  if (!sym) return '';
-  if (TOKEN_ICON_FALLBACKS[sym]) return TOKEN_ICON_FALLBACKS[sym];
-  return `https://cdn.jsdelivr.net/npm/cryptocurrency-icons@0.18.1/32/icon/${sym.toLowerCase()}.png`;
-}
-
 export function integerAmountToNumber(value: string | number, decimals = 18): number {
   try {
     const raw = String(value || '0');

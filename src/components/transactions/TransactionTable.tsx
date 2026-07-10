@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import type { TransactionEntry } from '@/store/useTransactionStore'
 import { getTokenPriceUSD, getHistoricalTokenPriceUSD } from '@/api/prices'
-import { safeImageUrl, tokenIconUrl } from '@/lib/utils'
+import { safeImageUrl } from '@/lib/utils'
+import { tokenIconUrl } from '@/lib/assets'
 import { CHART_THEME } from '@/lib/chart/indicators'
 
 interface PriceData {
@@ -71,25 +72,28 @@ export default function TransactionTable({ txs, onLoadMore, hasMore, loading, ti
 
   const hydrateBatch = useCallback(async (entries: TransactionEntry[]) => {
     setHydrating(true)
+    const results = await Promise.all(
+      entries.map(async (tx) => {
+        try {
+          const [currentPrice, histPrice] = await Promise.all([
+            getTokenPriceUSD(tx.tokenSymbol),
+            getHistoricalTokenPriceUSD(tx.tokenSymbol, new Date(tx.timestamp * 1000))
+          ])
+          const usdValue = tx.value * (currentPrice || 0)
+          const usdHist = tx.value * (histPrice || 0)
+          const pnl = usdValue - usdHist
+          const pnlPct = usdHist ? (pnl / usdHist) * 100 : 0
+          return [tx.hash, { usdValue, usdHist, pnl, pnlPct }] as const
+        } catch {
+          return [tx.hash, { usdValue: 0, usdHist: 0, pnl: 0, pnlPct: 0 }] as const
+        }
+      })
+    )
+
     const next: Record<string, PriceData> = {}
-
-    for (const tx of entries) {
-      try {
-        const [currentPrice, histPrice] = await Promise.all([
-          getTokenPriceUSD(tx.tokenSymbol),
-          getHistoricalTokenPriceUSD(tx.tokenSymbol, new Date(tx.timestamp * 1000))
-        ])
-        const usdValue = tx.value * (currentPrice || 0)
-        const usdHist = tx.value * (histPrice || 0)
-        const pnl = usdValue - usdHist
-        const pnlPct = usdHist ? (pnl / usdHist) * 100 : 0
-
-        next[tx.hash] = { usdValue, usdHist, pnl, pnlPct }
-      } catch {
-        next[tx.hash] = { usdValue: 0, usdHist: 0, pnl: 0, pnlPct: 0 }
-      }
+    for (const [hash, data] of results) {
+      next[hash] = data
     }
-
     setPrices(prev => ({ ...prev, ...next }))
     setHydrating(false)
   }, [])
