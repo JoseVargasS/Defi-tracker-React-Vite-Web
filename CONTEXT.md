@@ -19,14 +19,18 @@ DeFi & Crypto Terminal — single-page app para:
 | `localStorage` para persistencia | Sin backend; wallets y watchlist son del usuario |
 | `.env` con prefijo `VITE_` | Vite inyecta solo esas en build; keys fuera de control de versiones |
 | `src/lib/config.ts` lee env | Un solo punto de verdad, defaults publicos si no hay key |
+| `vi.mock` en tests | Mockear `makeRequest` al nivel de modulo es mas confiable que `vi.stubGlobal('fetch')` en CI |
+| `as unknown as TargetType` | Para casts de Chart.js sin usar `as any` |
+| SMA/EMA periodos desde types.ts | Single source of truth, no hardcodear en App.tsx |
 
 ## Architecture invariants
 
-- Toda UI es React + TS estricto. Evitar `as any` salvo union narrowing legitimo.
+- Toda UI es React + TS estricto. **Cero `as any`** en el codebase.
 - Stores Zustand en `src/store/`: `useMarketStore`, `useWalletStore`, `useTransactionStore`. Estado global solo ahi.
 - Cliente HTTP unico en `src/api/client.ts` (`makeRequest`): reintentos, redaccion de `apikey` en logs, timeouts.
 - Calculos tecnicos (Bollinger, Stoch RSI, RSI, Volume Profile, SMA/EMA) viven en `src/lib/chart/indicators.ts`. Plugins visuales de Chart.js en `src/lib/chart/plugins/`.
 - Datasets y escalas del grafico se arman en `src/components/market/CandlestickChart.tsx`.
+- Iconos de tokens en `src/lib/assets.ts` (no duplicar en utils.ts).
 - Keys API nunca viven en archivos versionados.
 - CSS por dominio en `src/styles/`. Sin gradientes decorativos grandes, border radius 6-8px.
 - Datos externos al DOM pasan por `escapeHTML()`; URLs por `safeImageUrl()`. CSP en `index.html` minimiza superficie XSS.
@@ -38,3 +42,4 @@ DeFi & Crypto Terminal — single-page app para:
 - Sin backend = sin privacidad real para keys en cliente.
 - CoinStats responde `429`/`409`; el codigo mitiga con caches y concurrencia limitada pero no los elimina.
 - Iconos de tokens dependen de CoinGecko/cdn; si fallan, hay fallback en UI.
+- Chart.js no tiene tipos nativos para candlestick; requiere casts con `as unknown as`.

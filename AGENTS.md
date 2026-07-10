@@ -15,8 +15,8 @@ App React + Vite + TypeScript llamada **DeFi & Crypto Terminal**. Sirve para:
 - React 19 + TypeScript 5.8 + Vite 6
 - Chart.js + chartjs-chart-financial + chartjs-adapter-date-fns
 - Zustand para estado global
-- Vitest para tests unitarios
-- Playwright para E2E
+- Vitest para tests unitarios (183 tests, 12 archivos)
+- Playwright para E2E (declarado, sin specs)
 - APIs: Binance Spot, Etherscan v2, CoinStats Open API
 
 ## Comandos utiles
@@ -27,6 +27,7 @@ npm run build        # tsc -b && vite build
 npm run lint         # eslint src/
 npm run typecheck    # tsc --noEmit
 npm test             # vitest run
+npm run test:coverage # vitest run --coverage
 npm run test:e2e     # playwright test
 npm run preview      # vite preview
 ```
@@ -40,13 +41,14 @@ src/
 ├── vite-env.d.ts               Tipos ImportMetaEnv
 ├── api/
 │   ├── client.ts               makeRequest con retry y redact
-│   ├── binance.ts              Precios, klines, exchangeInfo
+│   ├── binance.ts              Precios, klines, exchangeInfo, agregacion 5d/3M
 │   ├── coinstats.ts            Balances y transacciones CoinStats
 │   ├── etherscan.ts            Transacciones y balances ETH
 │   └── prices.ts               Precio actual e historico USD
 ├── components/
 │   ├── layout/Header.tsx
 │   ├── layout/Footer.tsx
+│   ├── ErrorBoundary.tsx       Fallback UI en main.tsx
 │   ├── market/PairSearch.tsx   Buscador de pares Binance
 │   ├── market/TrackedPairs.tsx Watchlist con polling
 │   ├── market/CandlestickChart.tsx  Velas, zoom/pan, indicadores
@@ -57,14 +59,14 @@ src/
 │   ├── transactions/TransactionSection.tsx  Fetch ETH + Base
 │   └── transactions/TransactionTable.tsx    Tabla con USD/P&L
 ├── lib/
-│   ├── config.ts               Endpoints, chains, defaults
-│   ├── utils.ts                formatPrice, escapeHTML, safeImageUrl, etc
+│   ├── config.ts               Endpoints, chains, defaults, periodos SMA/EMA
+│   ├── utils.ts                formatPrice, escapeHTML, safeImageUrl, integerAmountToNumber
 │   ├── storage.ts              localStorage helpers
-│   ├── assets.ts               COIN_ICON_URLS por simbolo
+│   ├── assets.ts               COIN_ICON_URLS, TOKEN_ICON_FALLBACKS, tokenIconUrl
 │   └── chart/
 │       ├── normalize.ts        normalizeKline, compactNumber
 │       ├── indicators.ts       Bollinger, StochRSI, RSI, Volume, VP, SMA, EMA
-│       ├── types.ts            EnhancedChart, ScaleLike, VPRow, etc.
+│       ├── types.ts            EnhancedChart, ScaleLike, VPRow, SMA_PERIOD_OPTIONS
 │       └── plugins/index.ts    Crosshair, currentPrice, legend, VRVP, measure
 ├── store/
 │   ├── useMarketStore.ts       Zustand: pares, chart, precios
@@ -72,8 +74,6 @@ src/
 │   └── useTransactionStore.ts  Solo exporta interface TransactionEntry
 ├── hooks/
 │   └── useInterval.ts          setInterval con cleanup y flag immediate
-├── components/
-│   └── ErrorBoundary.tsx       Fallback UI en main.tsx
 ├── test/
 │   └── setup.ts                Setup de Vitest (jsdom, jest-dom)
 ├── styles/
@@ -84,12 +84,24 @@ src/
 │   ├── crypto.css              Watchlist, mercado, chart
 │   ├── transactions.css        Tablas de transacciones
 │   └── responsive.css          Breakpoints
-└── __tests__/unit/             Tests Vitest (utils, storage, normalize, indicators)
+└── __tests__/unit/             Tests Vitest
+    ├── utils.test.ts           formatPrice, escapeHTML, safeImageUrl, etc
+    ├── storage.test.ts         localStorage, migracion, colores
+    ├── normalize.test.ts       normalizeKline, compactNumber
+    ├── indicators.test.ts      Bollinger, StochRSI, Volume, VP, CHART_THEME
+    ├── binance.test.ts         fetchPrice, fetchKlines, agregacion, cache, batch
+    ├── client.test.ts          makeRequest, retry 406/429
+    ├── coinstats.test.ts       balances, transacciones, precios
+    ├── etherscan.test.ts       ETH balance, token tx, normal tx
+    ├── prices.test.ts          getTokenPriceUSD, getHistoricalTokenPriceUSD
+    ├── stores.test.ts          useMarketStore, useWalletStore
+    ├── assets.test.ts          COIN_ICON_URLS, tokenIconUrl, coinDisplayName
+    └── useInterval.test.ts     callback, delay null, immediate, cleanup
 ```
 
 ## Reglas de edicion
 
-- TypeScript estricto, evitar `as any`.
+- TypeScript estricto, **cero `as any`** en el codebase. Usar `as unknown as TargetType` o tipos inline cuando Chart.js lo requiera.
 - Usar Zustand stores para estado global (`useMarketStore`, `useWalletStore`, `useTransactionStore`).
 - Indicadores tecnicos en `lib/chart/indicators.ts`; plugins en `lib/chart/plugins/`.
 - No dejar codigo muerto comentado.
@@ -98,22 +110,25 @@ src/
 - Iconos externos deben tener fallback.
 - Validar URLs externas con `safeImageUrl()`.
 - No loguear URLs con `apikey`, headers ni respuestas completas.
-- Tests con Vitest: `npm test`.
+- Tests con Vitest: `npm test`. Mocks via `vi.mock('@/api/client')`, no `vi.stubGlobal('fetch')`.
+- Iconos de tokens en `lib/assets.ts` (no duplicar en utils.ts).
 
 ## Grafica de velas
 
 `src/components/market/CandlestickChart.tsx`:
 
-- `buildTechnicalSeries(data)` -> calcula indicadores
+- `buildTechnicalSeries(data)` -> calcula indicadores, limpia cache SMA/EMA
 - `buildDatasets(symbol, candles, series, indicators)` -> datasets Chart.js
 - `createScales(interval, indicators)` -> escalas con paneles
 - `crosshairPlugin`, `currentPricePlugin`, `indicatorLegendPlugin` en `lib/chart/plugins/`
 - `fixedRangeVolumeProfilePlugin`, `measureRangePlugin`
+- SMA/EMA cache usa fingerprint (primer/ultimo timestamp) + se limpia en `buildTechnicalSeries`
 
 Calculos en `src/lib/chart/indicators.ts`:
 
 - `normalizeKline(kline)`, `compactNumber(value)` en `normalize.ts`
 - `calculateVolume`, `calculateBollingerBands`, `calculateStochRSI`, `calculateRSI`, `calculateVolumeProfile`
+- Periodos SMA/EMA: `SMA_PERIOD_OPTIONS` / `EMA_PERIOD_OPTIONS` en `types.ts` (40, 50, 75, 100, 150, 200)
 
 ## Transacciones
 
@@ -122,7 +137,7 @@ Calculos en `src/lib/chart/indicators.ts`:
 - `TX_PAGE_SIZE = 10`
 - Etherscan: `tokentx` + `txlist` en paralelo, dedup por hash+symbol+value
 - Base: CoinStats GET -> si 409, PATCH sync + retry
-- `TransactionTable.tsx`: renderiza filas, hidrata USD/P&L en segundo plano
+- `TransactionTable.tsx`: renderiza filas, hidrata USD/P&L en paralelo con `Promise.all`
 
 ## Precios
 

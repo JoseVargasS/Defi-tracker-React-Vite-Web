@@ -8,17 +8,26 @@ npm run test:watch       # watch mode
 npm run test:coverage    # con coverage v8
 ```
 
-Cobertura actual en `src/__tests__/unit/`:
+Cobertura actual en `src/__tests__/unit/` (12 archivos, 183 tests):
 
-- `utils.test.ts` — `formatPrice`, `escapeHTML`, `safeImageUrl`, `safeErrorMessage`, `apiStatusMessage`, `mapWithConcurrency`.
-- `storage.test.ts` — `readSavedWallets`, `writeSavedWallets`, `readTrackedPairs`, `writeTrackedPairs`, `STORAGE_KEYS`, versionado por `APP_STORAGE_VERSION`.
+- `utils.test.ts` — `formatPrice`, `escapeHTML`, `safeErrorMessage`, `apiStatusMessage`, `mapWithConcurrency`, `integerAmountToNumber`.
+- `storage.test.ts` — `readSavedWallets`, `writeSavedWallets`, `readTrackedPairs`, `writeTrackedPairs`, `readIndicatorColors`, `writeIndicatorColors`, `migrateAppStorage`, `clearAppStorage`, versionado por `APP_STORAGE_VERSION`.
 - `normalize.test.ts` — `normalizeKline`, `compactNumber`.
-- `indicators.test.ts` — `calculateVolume`, `calculateBollingerBands`, `calculateStochRSI`, `calculateVolumeProfile`, `CHART_THEME`.
+- `indicators.test.ts` — `calculateVolume`, `calculateBollingerBands`, `calculateStochRSI`, `calculateRSI`, `calculateVolumeProfile`, `CHART_THEME`.
+- `binance.test.ts` — `fetchPrice`, `fetch24hStats`, `fetchLatestKlines`, `fetchKlines`, agregacion 5d/3M, cache, `fetchPriceBatch`, `fetch24hStatsBatch`, `fetchExchangeInfo`, `fetchCoinsList`.
+- `client.test.ts` — `makeRequest` success, error, retry 406/429.
+- `coinstats.test.ts` — `getTokenAssetsByAddress`, `getWalletTransactions`, `fetchBaseTransactions`, `fetchCoinStatsTokenPrice`.
+- `etherscan.test.ts` — `getETHBalance`, `getTokenBalances`, `getTokenTransactions`, `getNormalTransactions`, `fetchEtherscanTransactions`.
+- `prices.test.ts` — `getTokenPriceUSD` (stablecoins, Binance, CoinStats fallback), `getHistoricalTokenPriceUSD`.
+- `stores.test.ts` — `useMarketStore` (all actions), `useWalletStore` (all actions).
+- `assets.test.ts` — `COIN_ICON_URLS`, `TOKEN_ICON_FALLBACKS`, `coinDisplayName`, `tokenIconUrl`.
+- `useInterval.test.ts` — callback, delay null, immediate, cleanup, ref update.
 
 Cuando agregues logica nueva:
 
 - Pure functions de `src/lib/chart/indicators.ts` y `src/lib/chart/normalize.ts` -> test directo.
 - Logica de stores (`src/store/`) -> test con `useStore.getState()`.
+- API modules (`src/api/`) -> mockear `makeRequest` via `vi.mock('@/api/client')`.
 - Componentes -> `@testing-library/react` ya esta instalado.
 
 ## E2E (Playwright)
