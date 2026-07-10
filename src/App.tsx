@@ -172,7 +172,7 @@ export default function App() {
     return () => document.removeEventListener("mousedown", handler);
   }, [colorPickerOpen]);
 
-  const ALLOWED_PERIODS = [20, 40, 50, 75, 100, 150, 200];
+  const ALLOWED_PERIODS = [40, 50, 75, 100, 150, 200];
 
   const handleSmaPeriod = (e: ChangeEvent<HTMLSelectElement>) => {
     const v = Number(e.target.value);
