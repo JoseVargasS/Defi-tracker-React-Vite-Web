@@ -7,10 +7,11 @@ beforeEach(() => {
 
 describe('makeRequest', () => {
   it('returns JSON on success', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+    const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ data: 'test' }),
-    }));
+    });
+    vi.stubGlobal('fetch', mockFetch);
     const result = await makeRequest('https://api.example.com/data');
     expect(result).toEqual({ data: 'test' });
   });

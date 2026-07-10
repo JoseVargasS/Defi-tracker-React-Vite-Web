@@ -1,8 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getTokenPriceUSD, getHistoricalTokenPriceUSD } from '@/api/prices';
 
+vi.mock('@/api/client', () => ({
+  makeRequest: vi.fn(),
+}));
+
+vi.mock('@/api/binance', () => ({
+  fetchPrice: vi.fn(),
+}));
+
+import { makeRequest } from '@/api/client';
+import { fetchPrice } from '@/api/binance';
+const mockedMakeRequest = vi.mocked(makeRequest);
+const mockedFetchPrice = vi.mocked(fetchPrice);
+
 beforeEach(() => {
-  vi.restoreAllMocks();
+  vi.clearAllMocks();
 });
 
 describe('getTokenPriceUSD', () => {
@@ -20,36 +33,21 @@ describe('getTokenPriceUSD', () => {
   });
 
   it('fetches price from Binance first', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ symbol: 'BTCUSDT', price: '65000.00' }),
-    }));
+    mockedFetchPrice.mockResolvedValue({ symbol: 'BTCUSDT', price: '65000.00' });
     const price = await getTokenPriceUSD('BTC');
     expect(price).toBe(65000);
   });
 
   it('falls back to CoinStats when Binance fails', async () => {
-    let callCount = 0;
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => {
-      callCount++;
-      if (callCount === 1) {
-        return Promise.resolve({
-          ok: false,
-          status: 400,
-          statusText: 'Bad Request',
-        });
-      }
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ result: [{ price: '3000' }] }),
-      });
-    }));
+    mockedFetchPrice.mockResolvedValue(null);
+    mockedMakeRequest.mockResolvedValue({ result: [{ price: '3000' }] });
     const price = await getTokenPriceUSD('ETH');
     expect(price).toBe(3000);
   });
 
   it('returns null when both sources fail', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fail')));
+    mockedFetchPrice.mockResolvedValue(null);
+    mockedMakeRequest.mockResolvedValue(null);
     const price = await getTokenPriceUSD('XYZ');
     expect(price).toBeNull();
   });
@@ -71,25 +69,19 @@ describe('getHistoricalTokenPriceUSD', () => {
       [now - 86400000 * 2, '100', '110', '90', '105', '1000', now - 86400000, '100000', 100, '500', '50000', '0'],
       [now - 86400000, '105', '115', '95', '110', '1200', now, '120000', 100, '600', '60000', '0'],
     ];
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(klines),
-    }));
+    mockedMakeRequest.mockResolvedValue(klines);
     const price = await getHistoricalTokenPriceUSD('BTC', new Date(now - 86400000));
     expect(price).toBe(110);
   });
 
   it('returns null when API fails', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fail')));
+    mockedMakeRequest.mockRejectedValue(new Error('fail'));
     const price = await getHistoricalTokenPriceUSD('BTC', new Date());
     expect(price).toBeNull();
   });
 
   it('returns null for empty klines response', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve([]),
-    }));
+    mockedMakeRequest.mockResolvedValue([]);
     const price = await getHistoricalTokenPriceUSD('BTC', new Date());
     expect(price).toBeNull();
   });
@@ -97,10 +89,7 @@ describe('getHistoricalTokenPriceUSD', () => {
   it('handles timestamp as number', async () => {
     const now = Date.now();
     const klines = [[now, '100', '110', '90', '105', '1000', now + 3600000, '100000', 100, '500', '50000', '0']];
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(klines),
-    }));
+    mockedMakeRequest.mockResolvedValue(klines);
     const price = await getHistoricalTokenPriceUSD('BTC', now);
     expect(price).toBe(105);
   });

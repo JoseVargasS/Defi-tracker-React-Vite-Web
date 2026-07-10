@@ -1,31 +1,32 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getETHBalance, getTokenBalances, getTokenTransactions, getNormalTransactions, fetchEtherscanTransactions } from '@/api/etherscan';
 
+vi.mock('@/api/client', () => ({
+  makeRequest: vi.fn(),
+}));
+
+import { makeRequest } from '@/api/client';
+const mockedMakeRequest = vi.mocked(makeRequest);
+
 beforeEach(() => {
-  vi.restoreAllMocks();
+  vi.clearAllMocks();
 });
 
 describe('getETHBalance', () => {
   it('returns balance string on success', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ result: '1000000000000000000' }),
-    }));
+    mockedMakeRequest.mockResolvedValue({ result: '1000000000000000000' });
     const result = await getETHBalance('0xabc');
     expect(result).toBe('1000000000000000000');
   });
 
   it('returns null on error', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fail')));
+    mockedMakeRequest.mockRejectedValue(new Error('fail'));
     const result = await getETHBalance('0xabc');
     expect(result).toBeNull();
   });
 
   it('returns null for non-string result', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ result: 12345 }),
-    }));
+    mockedMakeRequest.mockResolvedValue({ result: 12345 });
     const result = await getETHBalance('0xabc');
     expect(result).toBeNull();
   });
@@ -33,16 +34,13 @@ describe('getETHBalance', () => {
 
 describe('getTokenTransactions', () => {
   it('returns token transactions on success', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ result: [{ tokenSymbol: 'USDT' }], status: '1' }),
-    }));
+    mockedMakeRequest.mockResolvedValue({ result: [{ tokenSymbol: 'USDT' }], status: '1' });
     const result = await getTokenTransactions('0xabc');
     expect(result?.result.length).toBe(1);
   });
 
   it('returns null on error', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fail')));
+    mockedMakeRequest.mockRejectedValue(new Error('fail'));
     const result = await getTokenTransactions('0xabc');
     expect(result).toBeNull();
   });
@@ -50,16 +48,13 @@ describe('getTokenTransactions', () => {
 
 describe('getNormalTransactions', () => {
   it('returns normal transactions on success', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ result: [{ hash: '0x123' }], status: '1' }),
-    }));
+    mockedMakeRequest.mockResolvedValue({ result: [{ hash: '0x123' }], status: '1' });
     const result = await getNormalTransactions('0xabc');
     expect(result?.result.length).toBe(1);
   });
 
   it('returns null on error', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fail')));
+    mockedMakeRequest.mockRejectedValue(new Error('fail'));
     const result = await getNormalTransactions('0xabc');
     expect(result).toBeNull();
   });
@@ -89,10 +84,7 @@ describe('getTokenBalances', () => {
         },
       ],
     };
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(tokentx),
-    }));
+    mockedMakeRequest.mockResolvedValue(tokentx);
     const result = await getTokenBalances('0xabc');
     expect(result?.result.length).toBe(1);
     expect(result?.result[0].tokenSymbol).toBe('T1');
@@ -100,25 +92,19 @@ describe('getTokenBalances', () => {
   });
 
   it('returns empty result when no transactions', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ result: [] }),
-    }));
+    mockedMakeRequest.mockResolvedValue({ result: [] });
     const result = await getTokenBalances('0xabc');
     expect(result?.result).toEqual([]);
   });
 
   it('returns empty result on error', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fail')));
+    mockedMakeRequest.mockRejectedValue(new Error('fail'));
     const result = await getTokenBalances('0xabc');
     expect(result).toEqual({ result: [] });
   });
 
   it('returns null when result is null', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(null),
-    }));
+    mockedMakeRequest.mockResolvedValue(null);
     const result = await getTokenBalances('0xabc');
     expect(result?.result).toEqual([]);
   });
@@ -126,38 +112,29 @@ describe('getTokenBalances', () => {
 
 describe('fetchEtherscanTransactions', () => {
   it('merges tokentx and txlist results', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
-      if (url.includes('tokentx')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ result: [{ hash: '0x1', tokenSymbol: 'USDT' }] }),
-        });
+    mockedMakeRequest.mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('tokentx')) {
+        return Promise.resolve({ result: [{ hash: '0x1', tokenSymbol: 'USDT' }] });
       }
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ result: [{ hash: '0x2' }] }),
-      });
-    }));
+      return Promise.resolve({ result: [{ hash: '0x2' }] });
+    });
     const result = await fetchEtherscanTransactions('0xabc');
     expect(result.length).toBe(2);
   });
 
   it('handles partial failures gracefully', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
-      if (url.includes('tokentx')) {
+    mockedMakeRequest.mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('tokentx')) {
         return Promise.reject(new Error('fail'));
       }
-      return Promise.resolve({
-        ok: true,
-        json: () => Promise.resolve({ result: [{ hash: '0x2' }] }),
-      });
-    }));
+      return Promise.resolve({ result: [{ hash: '0x2' }] });
+    });
     const result = await fetchEtherscanTransactions('0xabc');
     expect(result.length).toBe(1);
   });
 
   it('returns empty when both fail', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fail')));
+    mockedMakeRequest.mockRejectedValue(new Error('fail'));
     const result = await fetchEtherscanTransactions('0xabc');
     expect(result).toEqual([]);
   });

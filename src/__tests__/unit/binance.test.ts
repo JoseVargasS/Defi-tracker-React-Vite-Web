@@ -1,9 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+vi.mock('@/api/client', () => ({
+  makeRequest: vi.fn(),
+}));
+
 import { fetchKlines, fetchLatestKlines, fetchPrice, fetch24hStats, fetch24hStatsBatch, fetchPriceBatch, fetchExchangeInfo, fetchCoinsList, _klinesCache } from '@/api/binance';
+import { makeRequest } from '@/api/client';
+const mockedMakeRequest = vi.mocked(makeRequest);
 
 beforeEach(() => {
   _klinesCache.clear();
-  vi.restoreAllMocks();
+  vi.clearAllMocks();
+  localStorage.clear();
 });
 
 function makeKline(openTime: number, o = '100', h = '110', l = '90', c = '105', v = '1000', q = '100000'): unknown[] {
@@ -12,16 +20,13 @@ function makeKline(openTime: number, o = '100', h = '110', l = '90', c = '105', 
 
 describe('fetchPrice', () => {
   it('returns price on success', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ symbol: 'BTCUSDT', price: '65000.00' }),
-    }));
+    mockedMakeRequest.mockResolvedValue({ symbol: 'BTCUSDT', price: '65000.00' });
     const result = await fetchPrice('BTCUSDT');
     expect(result).toEqual({ symbol: 'BTCUSDT', price: '65000.00' });
   });
 
   it('returns null on error', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network')));
+    mockedMakeRequest.mockRejectedValue(new Error('network'));
     const result = await fetchPrice('BTCUSDT');
     expect(result).toBeNull();
   });
@@ -29,16 +34,13 @@ describe('fetchPrice', () => {
 
 describe('fetch24hStats', () => {
   it('returns stats on success', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ symbol: 'BTCUSDT', priceChange: '100', priceChangePercent: '0.5', highPrice: '66000', lowPrice: '64000', volume: '1000', quoteVolume: '65000000' }),
-    }));
+    mockedMakeRequest.mockResolvedValue({ symbol: 'BTCUSDT', priceChange: '100', priceChangePercent: '0.5', highPrice: '66000', lowPrice: '64000', volume: '1000', quoteVolume: '65000000' });
     const result = await fetch24hStats('BTCUSDT');
     expect(result?.symbol).toBe('BTCUSDT');
   });
 
   it('returns null on error', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fail')));
+    mockedMakeRequest.mockRejectedValue(new Error('fail'));
     const result = await fetch24hStats('BTCUSDT');
     expect(result).toBeNull();
   });
@@ -47,16 +49,13 @@ describe('fetch24hStats', () => {
 describe('fetchLatestKlines', () => {
   it('returns normalized klines on success', async () => {
     const klines = [makeKline(1000000), makeKline(2000000)];
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(klines),
-    }));
+    mockedMakeRequest.mockResolvedValue(klines);
     const result = await fetchLatestKlines('BTCUSDT', '1d', 2);
     expect(result.length).toBe(2);
   });
 
   it('returns empty on error', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fail')));
+    mockedMakeRequest.mockRejectedValue(new Error('fail'));
     const result = await fetchLatestKlines('BTCUSDT', '1d', 2);
     expect(result).toEqual([]);
   });
@@ -65,10 +64,7 @@ describe('fetchLatestKlines', () => {
 describe('fetchKlines', () => {
   it('returns klines without aggregation for native interval', async () => {
     const klines = Array.from({ length: 5 }, (_, i) => makeKline(i * 1000));
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(klines),
-    }));
+    mockedMakeRequest.mockResolvedValue(klines);
     const result = await fetchKlines('BTCUSDT', '1d', 5);
     expect(result.length).toBe(5);
   });
@@ -77,10 +73,7 @@ describe('fetchKlines', () => {
     const klines = Array.from({ length: 10 }, (_, i) =>
       makeKline(i * 86400000, '100', '110', '90', '105'),
     );
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(klines),
-    }));
+    mockedMakeRequest.mockResolvedValue(klines);
     const result = await fetchKlines('BTCUSDT', '5d', 10);
     expect(result.length).toBe(2);
     const first = result[0] as string[];
@@ -89,31 +82,24 @@ describe('fetchKlines', () => {
   });
 
   it('returns empty on error', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fail')));
+    mockedMakeRequest.mockRejectedValue(new Error('fail'));
     const result = await fetchKlines('BTCUSDT', '1d', 5);
     expect(result).toEqual([]);
   });
 
   it('uses cache for repeated calls', async () => {
     const klines = [makeKline(1000)];
-    const fetchSpy = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(klines),
-    });
-    vi.stubGlobal('fetch', fetchSpy);
+    mockedMakeRequest.mockResolvedValue(klines);
     await fetchKlines('BTCUSDT', '1d', 1);
     await fetchKlines('BTCUSDT', '1d', 1);
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(mockedMakeRequest).toHaveBeenCalledTimes(1);
   });
 
   it('aggregates klines for 3M interval', async () => {
     const klines = Array.from({ length: 9 }, (_, i) =>
       makeKline(i * 86400000 * 30, '100', '120', '80', '110'),
     );
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(klines),
-    }));
+    mockedMakeRequest.mockResolvedValue(klines);
     const result = await fetchKlines('BTCUSDT', '3M', 9);
     expect(result.length).toBe(3);
     const first = result[0] as string[];
@@ -122,10 +108,7 @@ describe('fetchKlines', () => {
   });
 
   it('returns empty when API returns empty array', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve([]),
-    }));
+    mockedMakeRequest.mockResolvedValue([]);
     const result = await fetchKlines('BTCUSDT', '1d', 5);
     expect(result).toEqual([]);
   });
@@ -133,13 +116,10 @@ describe('fetchKlines', () => {
 
 describe('fetchPriceBatch', () => {
   it('returns batch prices on success', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve([
-        { symbol: 'BTCUSDT', price: '65000' },
-        { symbol: 'ETHUSDT', price: '3000' },
-      ]),
-    }));
+    mockedMakeRequest.mockResolvedValue([
+      { symbol: 'BTCUSDT', price: '65000' },
+      { symbol: 'ETHUSDT', price: '3000' },
+    ]);
     const result = await fetchPriceBatch(['BTCUSDT', 'ETHUSDT']);
     expect(result.length).toBe(2);
   });
@@ -150,7 +130,7 @@ describe('fetchPriceBatch', () => {
   });
 
   it('returns empty on error', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fail')));
+    mockedMakeRequest.mockRejectedValue(new Error('fail'));
     const result = await fetchPriceBatch(['BTCUSDT']);
     expect(result).toEqual([]);
   });
@@ -158,12 +138,9 @@ describe('fetchPriceBatch', () => {
 
 describe('fetch24hStatsBatch', () => {
   it('returns batch stats on success', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve([
-        { symbol: 'BTCUSDT', priceChange: '100', priceChangePercent: '0.5', highPrice: '66000', lowPrice: '64000', volume: '1000', quoteVolume: '65000000' },
-      ]),
-    }));
+    mockedMakeRequest.mockResolvedValue([
+      { symbol: 'BTCUSDT', priceChange: '100', priceChangePercent: '0.5', highPrice: '66000', lowPrice: '64000', volume: '1000', quoteVolume: '65000000' },
+    ]);
     const result = await fetch24hStatsBatch(['BTCUSDT']);
     expect(result.length).toBe(1);
   });
@@ -176,58 +153,44 @@ describe('fetch24hStatsBatch', () => {
 
 describe('fetchExchangeInfo', () => {
   it('returns exchange info on success', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ symbols: [{ symbol: 'BTCUSDT' }] }),
-    }));
+    mockedMakeRequest.mockResolvedValue({ symbols: [{ symbol: 'BTCUSDT' }] });
     const result = await fetchExchangeInfo();
     expect(result?.symbols.length).toBe(1);
   });
 
   it('returns null on error', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fail')));
+    mockedMakeRequest.mockRejectedValue(new Error('fail'));
     const result = await fetchExchangeInfo();
     expect(result).toBeNull();
   });
 });
 
 describe('fetchCoinsList', () => {
-  beforeEach(() => {
-    localStorage.clear();
-  });
-
   it('returns coins from API and caches', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({
-        symbols: [
-          { symbol: 'BTCUSDT', baseAsset: 'BTC', quoteAsset: 'USDT', status: 'TRADING', isSpotTradingAllowed: true },
-          { symbol: 'ETHUSDT', baseAsset: 'ETH', quoteAsset: 'USDT', status: 'TRADING', isSpotTradingAllowed: true },
-          { symbol: 'DELUSDT', baseAsset: 'DEL', quoteAsset: 'USDT', status: 'BREAK', isSpotTradingAllowed: false },
-        ],
-      }),
-    }));
+    mockedMakeRequest.mockResolvedValue({
+      symbols: [
+        { symbol: 'BTCUSDT', baseAsset: 'BTC', quoteAsset: 'USDT', status: 'TRADING', isSpotTradingAllowed: true },
+        { symbol: 'ETHUSDT', baseAsset: 'ETH', quoteAsset: 'USDT', status: 'TRADING', isSpotTradingAllowed: true },
+        { symbol: 'DELUSDT', baseAsset: 'DEL', quoteAsset: 'USDT', status: 'BREAK', isSpotTradingAllowed: false },
+      ],
+    });
     const result = await fetchCoinsList();
     expect(result.length).toBe(2);
     expect(result[0].base).toBe('BTC');
   });
 
   it('returns cached data on subsequent calls', async () => {
-    const fetchSpy = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({
-        symbols: [{ symbol: 'BTCUSDT', baseAsset: 'BTC', quoteAsset: 'USDT', status: 'TRADING', isSpotTradingAllowed: true }],
-      }),
+    mockedMakeRequest.mockResolvedValue({
+      symbols: [{ symbol: 'BTCUSDT', baseAsset: 'BTC', quoteAsset: 'USDT', status: 'TRADING', isSpotTradingAllowed: true }],
     });
-    vi.stubGlobal('fetch', fetchSpy);
     await fetchCoinsList();
     const cached = await fetchCoinsList();
     expect(cached.length).toBe(1);
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(mockedMakeRequest).toHaveBeenCalledTimes(1);
   });
 
   it('returns empty on error', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fail')));
+    mockedMakeRequest.mockRejectedValue(new Error('fail'));
     const result = await fetchCoinsList();
     expect(result).toEqual([]);
   });
