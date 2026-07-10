@@ -6,8 +6,11 @@ import {
   writeTrackedPairs,
   readIndicatorColors,
   writeIndicatorColors,
+  migrateAppStorage,
+  clearAppStorage,
   STORAGE_KEYS,
 } from '@/lib/storage';
+import { APP_STORAGE_VERSION } from '@/lib/config';
 
 const VALID_ADDRESS = '0x1234567890abcdef1234567890abcdef12345678';
 const VALID_ADDRESS_2 = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -173,5 +176,57 @@ describe('indicator colors persistence', () => {
     for (const key of keys) {
       expect(colors[key]).toBeTruthy();
     }
+  });
+});
+
+describe('migrateAppStorage', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('sets storage version after migration', () => {
+    migrateAppStorage();
+    expect(localStorage.getItem(STORAGE_KEYS.version)).toBeTruthy();
+  });
+
+  it('clears trackedPairs and coinsListCache when version mismatches', () => {
+    localStorage.setItem(STORAGE_KEYS.trackedPairs, '["OLDPAIR"]');
+    localStorage.setItem(STORAGE_KEYS.coinsListCache, '{"old":true}');
+    localStorage.setItem(STORAGE_KEYS.version, 'old-version');
+
+    migrateAppStorage();
+
+    expect(localStorage.getItem(STORAGE_KEYS.trackedPairs)).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEYS.coinsListCache)).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEYS.version)).toBeTruthy();
+  });
+
+  it('preserves trackedPairs when version matches', () => {
+    localStorage.setItem(STORAGE_KEYS.version, APP_STORAGE_VERSION);
+    const pairs = ['ETHUSDT', 'BTCUSDT'];
+    writeTrackedPairs(pairs);
+    migrateAppStorage();
+    expect(readTrackedPairs()).toEqual(pairs);
+  });
+});
+
+describe('clearAppStorage', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('removes all storage keys and reinitializes', () => {
+    writeSavedWallets(['0x1234567890abcdef1234567890abcdef12345678']);
+    writeTrackedPairs(['ETHUSDT']);
+    writeIndicatorColors({ ...readIndicatorColors(), sma: '#ff0000' });
+
+    clearAppStorage();
+
+    expect(readSavedWallets()).toEqual([]);
+    expect(readTrackedPairs()).toEqual([
+      'ETHUSDT', 'BTCUSDT', 'USUALUSDT', 'VELODROMEUSDT', 'BATUSDT', 'BIOUSDT',
+    ]);
+    const colors = readIndicatorColors();
+    expect(colors.sma).not.toBe('#ff0000');
   });
 });

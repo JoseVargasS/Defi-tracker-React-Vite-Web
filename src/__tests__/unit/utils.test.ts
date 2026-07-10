@@ -6,6 +6,8 @@ import {
   safeErrorMessage,
   apiStatusMessage,
   mapWithConcurrency,
+  tokenIconUrl,
+  integerAmountToNumber,
 } from '@/lib/utils';
 
 describe('formatPrice', () => {
@@ -176,5 +178,60 @@ describe('mapWithConcurrency', () => {
   it('handles empty array', async () => {
     const results = await mapWithConcurrency([], 5, async (n) => n);
     expect(results).toEqual([]);
+  });
+});
+
+describe('tokenIconUrl', () => {
+  it('returns empty string for empty input', () => {
+    expect(tokenIconUrl('')).toBe('');
+    expect(tokenIconUrl(null as any)).toBe('');
+    expect(tokenIconUrl(undefined as any)).toBe('');
+  });
+
+  it('returns fallback URL for known symbols', () => {
+    const url = tokenIconUrl('ETH');
+    expect(url).toBe('/images/Eth-icon-purple.png');
+  });
+
+  it('falls back to CDN for unknown symbols', () => {
+    const url = tokenIconUrl('XYZ');
+    expect(url).toContain('cdn.jsdelivr.net');
+    expect(url).toContain('xyz.png');
+  });
+
+  it('normalizes to uppercase', () => {
+    const url = tokenIconUrl('eth');
+    expect(url).toBe('/images/Eth-icon-purple.png');
+  });
+});
+
+describe('integerAmountToNumber', () => {
+  it('converts small integer with 18 decimals', () => {
+    const result = integerAmountToNumber('1000000000000000000', 18);
+    expect(result).toBeCloseTo(1.0);
+  });
+
+  it('returns 0 for empty/zero input', () => {
+    expect(integerAmountToNumber('', 18)).toBe(0);
+    expect(integerAmountToNumber('0', 18)).toBe(0);
+  });
+
+  it('handles decimal input directly', () => {
+    expect(integerAmountToNumber('1.5', 18)).toBe(1.5);
+  });
+
+  it('handles non-numeric strings', () => {
+    expect(integerAmountToNumber('abc', 18)).toBe(0);
+  });
+
+  it('handles large numbers with BigInt path', () => {
+    const big = '123456789012345678901234567890';
+    const result = integerAmountToNumber(big, 18);
+    expect(result).toBeGreaterThan(0);
+  });
+
+  it('handles non-finite decimals parameter', () => {
+    const result = integerAmountToNumber('100', NaN);
+    expect(result).toBe(100 / Math.pow(10, 18));
   });
 });
