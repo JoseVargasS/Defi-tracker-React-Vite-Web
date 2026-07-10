@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fetchKlines, fetchLatestKlines, fetchPrice, fetch24hStats, fetch24hStatsBatch, fetchPriceBatch, fetchExchangeInfo, fetchCoinsList, _klinesCache } from '@/api/binance';
-import { STORAGE_KEYS } from '@/lib/storage';
 
 beforeEach(() => {
   _klinesCache.clear();

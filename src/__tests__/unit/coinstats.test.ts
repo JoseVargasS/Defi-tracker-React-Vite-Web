@@ -123,8 +123,8 @@ describe('fetchBaseTransactions', () => {
     }));
     const result = await fetchBaseTransactions('0xabc');
     expect(result.length).toBe(1);
-    expect((result[0] as any).tokenSymbol).toBe('ETH');
-    expect((result[0] as any).value).toBe(100);
+    expect((result[0] as Record<string, unknown>).tokenSymbol).toBe('ETH');
+    expect((result[0] as Record<string, unknown>).value).toBe(100);
   });
 
   it('flattens transactions without inner items (coinData)', async () => {
@@ -141,7 +141,7 @@ describe('fetchBaseTransactions', () => {
     }));
     const result = await fetchBaseTransactions('0xabc');
     expect(result.length).toBe(1);
-    expect((result[0] as any).tokenSymbol).toBe('USDC');
+    expect((result[0] as Record<string, unknown>).tokenSymbol).toBe('USDC');
   });
 
   it('returns empty array on error', async () => {

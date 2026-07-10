@@ -124,10 +124,11 @@ export default function App() {
     const unsubTracked = useMarketStore.subscribe((state) => {
       writeTrackedPairs(state.tracked);
     });
+    let colorSaveTimer: ReturnType<typeof setTimeout> | null = null;
     const unsubColors = useMarketStore.subscribe((state, prevState) => {
       if (state.chartIndicators.colors !== prevState.chartIndicators.colors) {
-        clearTimeout((window as any)._colorSaveTimer);
-        (window as any)._colorSaveTimer = setTimeout(
+        if (colorSaveTimer !== null) clearTimeout(colorSaveTimer);
+        colorSaveTimer = setTimeout(
           () => writeIndicatorColors(state.chartIndicators.colors),
           300,
         );
@@ -148,7 +149,7 @@ export default function App() {
     return () => {
       unsubTracked();
       unsubColors();
-      clearTimeout((window as any)._colorSaveTimer);
+      if (colorSaveTimer !== null) clearTimeout(colorSaveTimer);
       window.removeEventListener('unhandledrejection', handler);
     };
     // ponytail: mount once
@@ -265,7 +266,7 @@ export default function App() {
                       ))}
                       <select
                         className="indicator-select"
-                        value={selectIntervals.includes(currentInterval as any) ? currentInterval : ''}
+                        value={selectIntervals.includes(currentInterval as typeof selectIntervals[number]) ? currentInterval : ''}
                         onChange={(e) => { if (e.target.value) setCurrentInterval(e.target.value); }}
                         aria-label="Intervalos adicionales"
                       >

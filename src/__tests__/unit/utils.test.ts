@@ -184,8 +184,10 @@ describe('mapWithConcurrency', () => {
 describe('tokenIconUrl', () => {
   it('returns empty string for empty input', () => {
     expect(tokenIconUrl('')).toBe('');
-    expect(tokenIconUrl(null as any)).toBe('');
-    expect(tokenIconUrl(undefined as any)).toBe('');
+    // @ts-expect-error testing null edge case
+    expect(tokenIconUrl(null)).toBe('');
+    // @ts-expect-error testing undefined edge case
+    expect(tokenIconUrl(undefined)).toBe('');
   });
 
   it('returns fallback URL for known symbols', () => {

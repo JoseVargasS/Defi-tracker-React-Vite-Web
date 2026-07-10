@@ -163,7 +163,7 @@ describe('indicator colors persistence', () => {
       bbFill: '#f0f0f0',
       stochLevelOver: '#ff0000',
       stochLevelUnder: '#00ff00',
-    } as any);
+    } as IndicatorColors);
     // invalid ones fall back to defaults
     const read = readIndicatorColors();
     expect(read.sma).not.toBe('#zzzzzz');

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // ponytail: Chart.js types are stricter than our local ChartDatasetLike; casts are intentional
 import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import {
@@ -51,6 +50,7 @@ import type {
   ChartDatasetLike,
   IndicatorColorKey,
   MeasurePoint,
+  EventfulCanvas,
 } from "@/lib/chart/types";
 import type { ChartIndicatorsState } from "@/lib/chart/types";
 
@@ -466,7 +466,7 @@ const patchDatasetColors = (
 ) => {
   const ds = chart.data.datasets;
   for (let i = 0; i < ds.length; i++) {
-    const d = ds[i] as any;
+    const d = ds[i] as ChartDatasetLike;
     const label = d.label as string | undefined;
     if (!label) continue;
     let colorKey: IndicatorColorKey | null = null;
@@ -611,7 +611,7 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
         newCandles,
         newSeries,
         chart._indicators,
-      ) as any;
+      ) as ChartDatasetLike[];
       chart.update("none");
 
       try {
@@ -671,7 +671,7 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
         const chart = new Chart(ctx, {
           type: "candlestick",
           data: {
-            datasets: buildDatasets(symbol, raw, fullSeries, inds) as any,
+            datasets: buildDatasets(symbol, raw, fullSeries, inds) as ChartDatasetLike[],
           },
           options: {
             responsive: true,
@@ -720,7 +720,7 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
                 },
               },
             },
-            scales: createScales(interval, inds) as any,
+            scales: createScales(interval, inds) as Record<string, unknown>,
           },
           plugins: [
             rightScaleBackgroundPlugin,
@@ -803,9 +803,9 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
           (chart as unknown as EnhancedChart)._userMovedPan = false;
         };
 
-        (canvas as any)._downHandler = downHandler;
-        (canvas as any)._moveHandler = moveHandler;
-        (canvas as any)._dblClickHandler = dblClickHandler;
+        (canvas as unknown as EventfulCanvas)._downHandler = downHandler;
+        (canvas as unknown as EventfulCanvas)._moveHandler = moveHandler;
+        (canvas as unknown as EventfulCanvas)._dblClickHandler = dblClickHandler;
 
         canvas.addEventListener("pointerdown", downHandler);
         canvas.addEventListener("pointermove", moveHandler);
@@ -818,7 +818,7 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
     return () => {
       destroyed = true;
       if (canvas) {
-        const ec = canvas as any;
+        const ec = canvas as unknown as EventfulCanvas;
         if (ec._downHandler)
           canvas.removeEventListener("pointerdown", ec._downHandler);
         if (ec._moveHandler)
@@ -871,9 +871,9 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
           raw,
           fullSeries,
           indicatorsRef.current,
-        ) as any;
+        ) as ChartDatasetLike[];
         const scales = createScales(interval, indicatorsRef.current);
-        chart.options.scales = scales as any;
+        chart.options.scales = scales as Record<string, unknown>;
         chart.update("none");
 
         // ponytail: preserve visible candle count the user had before switching interval
@@ -942,13 +942,13 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
       Number.isFinite(oldMin) &&
       Number.isFinite(oldMax);
 
-    chart.options.scales = createScales(interval, indicators) as any;
+    chart.options.scales = createScales(interval, indicators) as Record<string, unknown>;
     chart.data.datasets = buildDatasets(
       symbol,
       rawData,
       fullSeries,
       indicators,
-    ) as any;
+    ) as ChartDatasetLike[];
     chart.update("none");
 
     if (preserveView) {
@@ -976,7 +976,7 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
     chart._measure.start = null;
     chart._measure.end = null;
     chart._measure.preview = null;
-    const zoomOpts: any = chart.options.plugins?.zoom;
+    const zoomOpts = chart.options.plugins?.zoom as Record<string, unknown> | undefined;
     if (zoomOpts) {
       if (zoomOpts.pan) zoomOpts.pan.enabled = !measureActive;
       if (zoomOpts.zoom?.wheel) zoomOpts.zoom.wheel.enabled = !measureActive;
@@ -1030,7 +1030,7 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
           rawData,
           series,
           indicatorsRef.current,
-        ) as any;
+        ) as ChartDatasetLike[];
         chart.update("none");
       } catch {
         /* silent */
@@ -1060,7 +1060,7 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
       if (!prefixes || !prefixes.length) return;
       const ds = chart.data.datasets;
       for (let i = 0; i < ds.length; i++) {
-        const d = ds[i] as any;
+        const d = ds[i] as ChartDatasetLike;
         const label = d.label as string | undefined;
         if (!label) continue;
         if (prefixes.some((p) => label.startsWith(p))) {
