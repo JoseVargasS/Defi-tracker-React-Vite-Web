@@ -35,11 +35,15 @@ function aggregateKlinesInPlace(klines: unknown[][], groupSize: number) {
     for (const candle of chunk) {
       const h = parseFloat(candle[2] as string);
       const l = parseFloat(candle[3] as string);
-      if (h > high) high = h;
-      if (l > low) low = l;
+      if (Number.isFinite(h) && h > high) high = h;
+      if (Number.isFinite(l) && l < low) low = l;
       volume += parseFloat((candle[5] ?? 0) as string);
       quoteVolume += parseFloat((candle[7] ?? 0) as string);
     }
+
+    // Fallback: if no valid high/low found (e.g. NaN values), derive from open/close
+    if (!Number.isFinite(high)) high = Math.max(open, close) || 0;
+    if (!Number.isFinite(low)) low = Math.min(open, close) || 0;
 
     aggregated.push([
       String(openTime),

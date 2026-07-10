@@ -16,12 +16,17 @@ export interface XY {
 export type KlineRaw = [number, string, string, string, string, string, number, string, number, string, string, string];
 
 export function normalizeKline(kline: KlineRaw): Candle {
+  const o = Number(kline[1]);
+  const c = Number(kline[4]);
+  const fallback = (o + c) / 2 || 0;
+  const rawH = Number(kline[2]);
+  const rawL = Number(kline[3]);
   return {
     x: Number(kline[0]),
-    o: Number(kline[1]),
-    h: Number(kline[2]),
-    l: Number(kline[3]),
-    c: Number(kline[4]),
+    o,
+    h: Number.isFinite(rawH) ? rawH : fallback,
+    l: Number.isFinite(rawL) ? rawL : fallback,
+    c,
     v: Number(kline[5] ?? 0),
     q: Number(kline[7] ?? 0),
   };
