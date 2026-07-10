@@ -11,6 +11,7 @@ import {
   STORAGE_KEYS,
 } from '@/lib/storage';
 import { APP_STORAGE_VERSION } from '@/lib/config';
+import type { IndicatorColors } from '@/lib/chart/types';
 
 const VALID_ADDRESS = '0x1234567890abcdef1234567890abcdef12345678';
 const VALID_ADDRESS_2 = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';

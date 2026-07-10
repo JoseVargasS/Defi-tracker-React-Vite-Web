@@ -466,8 +466,8 @@ const patchDatasetColors = (
 ) => {
   const ds = chart.data.datasets;
   for (let i = 0; i < ds.length; i++) {
-    const d = ds[i] as ChartDatasetLike;
-    const label = d.label as string | undefined;
+    const d = ds[i] as { label?: string; borderColor?: string | string[]; backgroundColor?: string | string[] };
+    const label = d.label;
     if (!label) continue;
     let colorKey: IndicatorColorKey | null = null;
     if (label.startsWith("BB Upper") || label.startsWith("BB Lower"))
@@ -611,7 +611,7 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
         newCandles,
         newSeries,
         chart._indicators,
-      ) as ChartDatasetLike[];
+      ) as unknown as typeof chart.data.datasets;
       chart.update("none");
 
       try {
@@ -671,7 +671,7 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
         const chart = new Chart(ctx, {
           type: "candlestick",
           data: {
-            datasets: buildDatasets(symbol, raw, fullSeries, inds) as ChartDatasetLike[],
+            datasets: buildDatasets(symbol, raw, fullSeries, inds) as never,
           },
           options: {
             responsive: true,
@@ -720,7 +720,7 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
                 },
               },
             },
-            scales: createScales(interval, inds) as Record<string, unknown>,
+            scales: createScales(interval, inds) as never,
           },
           plugins: [
             rightScaleBackgroundPlugin,
@@ -871,9 +871,9 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
           raw,
           fullSeries,
           indicatorsRef.current,
-        ) as ChartDatasetLike[];
+        ) as never;
         const scales = createScales(interval, indicatorsRef.current);
-        chart.options.scales = scales as Record<string, unknown>;
+        chart.options.scales = scales as never;
         chart.update("none");
 
         // ponytail: preserve visible candle count the user had before switching interval
@@ -942,13 +942,13 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
       Number.isFinite(oldMin) &&
       Number.isFinite(oldMax);
 
-    chart.options.scales = createScales(interval, indicators) as Record<string, unknown>;
+    chart.options.scales = createScales(interval, indicators) as never;
     chart.data.datasets = buildDatasets(
       symbol,
       rawData,
       fullSeries,
       indicators,
-    ) as ChartDatasetLike[];
+    ) as never;
     chart.update("none");
 
     if (preserveView) {
@@ -976,7 +976,7 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
     chart._measure.start = null;
     chart._measure.end = null;
     chart._measure.preview = null;
-    const zoomOpts = chart.options.plugins?.zoom as Record<string, unknown> | undefined;
+    const zoomOpts = chart.options.plugins?.zoom as { pan?: { enabled: boolean }; zoom?: { wheel?: { enabled: boolean }; pinch?: { enabled: boolean } } } | undefined;
     if (zoomOpts) {
       if (zoomOpts.pan) zoomOpts.pan.enabled = !measureActive;
       if (zoomOpts.zoom?.wheel) zoomOpts.zoom.wheel.enabled = !measureActive;
@@ -1030,7 +1030,7 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
           rawData,
           series,
           indicatorsRef.current,
-        ) as ChartDatasetLike[];
+        ) as never;
         chart.update("none");
       } catch {
         /* silent */
@@ -1060,8 +1060,8 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
       if (!prefixes || !prefixes.length) return;
       const ds = chart.data.datasets;
       for (let i = 0; i < ds.length; i++) {
-        const d = ds[i] as ChartDatasetLike;
-        const label = d.label as string | undefined;
+        const d = ds[i] as { label?: string; borderColor?: string; backgroundColor?: string };
+        const label = d.label;
         if (!label) continue;
         if (prefixes.some((p) => label.startsWith(p))) {
           d.borderColor = hex;

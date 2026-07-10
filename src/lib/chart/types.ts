@@ -80,6 +80,7 @@ export interface EventfulCanvas extends HTMLCanvasElement {
   _downHandler: ((e: PointerEvent) => void) | undefined;
   _moveHandler: ((e: PointerEvent) => void) | undefined;
   _upHandler: ((e: PointerEvent) => void) | undefined;
+  _dblClickHandler: ((e: MouseEvent) => void) | undefined;
 }
 
 export interface ScaleLike {
