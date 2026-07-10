@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // ponytail: Chart.js types are stricter than our local ChartDatasetLike; casts are intentional
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
 import {
   Chart,
   BarController,
@@ -34,6 +34,8 @@ import {
   calculateVolume,
   calculateSMA,
   calculateEMA,
+  calculateRSI,
+  getIndicatorColor,
 } from "@/lib/chart/indicators";
 import {
   crosshairPlugin,
@@ -47,6 +49,7 @@ import {
 import type {
   EnhancedChart,
   ChartDatasetLike,
+  IndicatorColorKey,
   MeasurePoint,
 } from "@/lib/chart/types";
 import type { ChartIndicatorsState } from "@/lib/chart/types";
@@ -77,8 +80,29 @@ interface TechnicalSeries {
   bands: { upper: XY[]; middle: XY[]; lower: XY[] };
   volume: { x: number; y: number; q: number; color: string }[];
   stochRsi: { k: XY[]; d: XY[] };
-  sma: { 100: XY[]; 200: XY[] };
-  ema: { 100: XY[]; 200: XY[] };
+  rsi: XY[];
+  sma: Record<number, XY[]>;
+  ema: Record<number, XY[]>;
+}
+
+const smaCache = new Map<string, XY[]>();
+const emaCache = new Map<string, XY[]>();
+
+function getSmaSeries(data: Candle[], period: number): XY[] {
+  const key = `${data.length}-${period}`;
+  const hit = smaCache.get(key);
+  if (hit) return hit;
+  const out = calculateSMA(data, period);
+  smaCache.set(key, out);
+  return out;
+}
+function getEmaSeries(data: Candle[], period: number): XY[] {
+  const key = `${data.length}-${period}`;
+  const hit = emaCache.get(key);
+  if (hit) return hit;
+  const out = calculateEMA(data, period);
+  emaCache.set(key, out);
+  return out;
 }
 
 const CANDLE_COLORS = {
@@ -93,7 +117,7 @@ const timeUnitByInterval = (interval: string) => {
   if (["3M", "1M"].includes(interval)) return "month";
   if (interval === "1w") return "week";
   if (["5d", "3d", "1d"].includes(interval)) return "day";
-  if (["12h", "4h", "1h"].includes(interval)) return "hour";
+  if (["12h", "8h", "6h", "4h", "2h", "1h"].includes(interval)) return "hour";
   return "minute";
 };
 
@@ -101,14 +125,9 @@ const buildTechnicalSeries = (data: Candle[]): TechnicalSeries => ({
   bands: calculateBollingerBands(data),
   volume: calculateVolume(data),
   stochRsi: calculateStochRSI(data),
-  sma: {
-    100: calculateSMA(data, 100),
-    200: calculateSMA(data, 200),
-  },
-  ema: {
-    100: calculateEMA(data, 100),
-    200: calculateEMA(data, 200),
-  },
+  rsi: [],
+  sma: {},
+  ema: {},
 });
 
 const horizontalLevel = (candles: Candle[], value: number): XY[] =>
@@ -145,7 +164,7 @@ function buildDatasets(
         type: "line",
         data: series.bands.upper,
         yAxisID: "price",
-        borderColor: CHART_THEME.bbLine,
+        borderColor: getIndicatorColor(indicators, "bbLine"),
         borderWidth: 1.1,
         pointRadius: 0,
         fill: false,
@@ -156,8 +175,8 @@ function buildDatasets(
         type: "line",
         data: series.bands.lower,
         yAxisID: "price",
-        borderColor: CHART_THEME.bbLine,
-        backgroundColor: CHART_THEME.bbFill,
+        borderColor: getIndicatorColor(indicators, "bbLine"),
+        backgroundColor: getIndicatorColor(indicators, "bbFill"),
         borderWidth: 1.1,
         pointRadius: 0,
         fill: "-1",
@@ -168,7 +187,7 @@ function buildDatasets(
         type: "line",
         data: series.bands.middle,
         yAxisID: "price",
-        borderColor: CHART_THEME.bbBasis,
+        borderColor: getIndicatorColor(indicators, "bbBasis"),
         borderWidth: 1,
         pointRadius: 0,
         fill: false,
@@ -199,7 +218,7 @@ function buildDatasets(
         type: "line",
         data: series.stochRsi.k,
         yAxisID: "stochRsi",
-        borderColor: CHART_THEME.stochK,
+        borderColor: getIndicatorColor(indicators, "stochK"),
         borderWidth: 1.4,
         pointRadius: 0,
         tension: 0.18,
@@ -210,7 +229,7 @@ function buildDatasets(
         type: "line",
         data: series.stochRsi.d,
         yAxisID: "stochRsi",
-        borderColor: CHART_THEME.stochD,
+        borderColor: getIndicatorColor(indicators, "stochD"),
         borderWidth: 1.2,
         pointRadius: 0,
         tension: 0.18,
@@ -221,7 +240,7 @@ function buildDatasets(
         type: "line",
         data: horizontalLevel(candles, 80),
         yAxisID: "stochRsi",
-        borderColor: CHART_THEME.stochLevelOver,
+        borderColor: getIndicatorColor(indicators, "stochLevelOver"),
         borderDash: [2, 2] as [number, number],
         borderWidth: 1,
         pointRadius: 0,
@@ -232,7 +251,7 @@ function buildDatasets(
         type: "line",
         data: horizontalLevel(candles, 20),
         yAxisID: "stochRsi",
-        borderColor: CHART_THEME.stochLevelUnder,
+        borderColor: getIndicatorColor(indicators, "stochLevelUnder"),
         borderDash: [2, 2] as [number, number],
         borderWidth: 1,
         pointRadius: 0,
@@ -241,13 +260,55 @@ function buildDatasets(
     );
   }
 
+  if (indicators.rsiEnabled) {
+    const rsiData =
+      series.rsi.length && series.rsi.length === candles.length
+        ? series.rsi
+        : calculateRSI(candles, indicators.rsiPeriod);
+    datasets.push(
+      {
+        label: `RSI ${indicators.rsiPeriod}`,
+        type: "line",
+        data: rsiData,
+        yAxisID: "rsi",
+        borderColor: getIndicatorColor(indicators, "rsi"),
+        borderWidth: 1.4,
+        pointRadius: 0,
+        tension: 0.18,
+        order: 40,
+      },
+      {
+        label: "RSI 70",
+        type: "line",
+        data: horizontalLevel(candles, 70),
+        yAxisID: "rsi",
+        borderColor: getIndicatorColor(indicators, "stochLevelOver"),
+        borderDash: [2, 2] as [number, number],
+        borderWidth: 1,
+        pointRadius: 0,
+        order: 41,
+      },
+      {
+        label: "RSI 30",
+        type: "line",
+        data: horizontalLevel(candles, 30),
+        yAxisID: "rsi",
+        borderColor: getIndicatorColor(indicators, "stochLevelUnder"),
+        borderDash: [2, 2] as [number, number],
+        borderWidth: 1,
+        pointRadius: 0,
+        order: 42,
+      },
+    );
+  }
+
   if (indicators.smaEnabled) {
     datasets.push({
       label: `SMA ${indicators.smaPeriod}`,
       type: "line",
-      data: series.sma[indicators.smaPeriod as 100 | 200],
+      data: getSmaSeries(candles, indicators.smaPeriod),
       yAxisID: "price",
-      borderColor: CHART_THEME.sma,
+      borderColor: getIndicatorColor(indicators, "sma"),
       borderWidth: 1.6,
       pointRadius: 0,
       fill: false,
@@ -259,9 +320,9 @@ function buildDatasets(
     datasets.push({
       label: `EMA ${indicators.emaPeriod}`,
       type: "line",
-      data: series.ema[indicators.emaPeriod as 100 | 200],
+      data: getEmaSeries(candles, indicators.emaPeriod),
       yAxisID: "price",
-      borderColor: CHART_THEME.ema,
+      borderColor: getIndicatorColor(indicators, "ema"),
       borderWidth: 1.6,
       pointRadius: 0,
       fill: false,
@@ -366,8 +427,78 @@ function createScales(interval: string, indicators: ChartIndicatorsState) {
       },
       border: { color: CHART_THEME.border, display: false },
     },
+    rsi: {
+      type: "linear" as const,
+      axis: "y" as const,
+      display: indicators.rsiEnabled,
+      position: "right" as const,
+      stack: PANEL_STACK,
+      stackWeight: indicators.rsiEnabled ? 1.45 : 0,
+      min: 0,
+      max: 100,
+      grid: { color: CHART_THEME.stochGrid, drawTicks: false },
+      ticks: {
+        color: CHART_THEME.muted,
+        font: {
+          size: 9,
+          family:
+            "-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif",
+        },
+        padding: 4,
+        stepSize: 50,
+      },
+      border: { color: CHART_THEME.border, display: false },
+    },
   };
 }
+
+const patchDatasetColors = (
+  chart: EnhancedChart,
+  indicators: ChartIndicatorsState,
+) => {
+  const ds = chart.data.datasets;
+  for (let i = 0; i < ds.length; i++) {
+    const d = ds[i] as any;
+    const label = d.label as string | undefined;
+    if (!label) continue;
+    let colorKey: IndicatorColorKey | null = null;
+    if (label.startsWith("BB Upper") || label.startsWith("BB Lower"))
+      colorKey = "bbLine";
+    else if (label.startsWith("BB Basis")) colorKey = "bbBasis";
+    else if (label.startsWith("Stoch RSI %K")) colorKey = "stochK";
+    else if (label.startsWith("Stoch RSI %D")) colorKey = "stochD";
+    else if (
+      label.startsWith("Stoch RSI 80") || label.startsWith("RSI 70")
+    ) colorKey = "stochLevelOver";
+    else if (
+      label.startsWith("Stoch RSI 20") || label.startsWith("RSI 30")
+    ) colorKey = "stochLevelUnder";
+    else if (label.startsWith("RSI ") && !label.includes(" 70") && !label.includes(" 30"))
+      colorKey = "rsi";
+    else if (label.startsWith("SMA ")) colorKey = "sma";
+    else if (label.startsWith("EMA ")) colorKey = "ema";
+    if (colorKey) {
+      d.borderColor = getIndicatorColor(indicators, colorKey);
+    }
+    if (label.startsWith("BB Lower")) {
+      d.backgroundColor = getIndicatorColor(indicators, "bbFill");
+    }
+  }
+};
+
+const visibleCandleCount = (chart: EnhancedChart): number => {
+  const xScale = chart.scales?.x;
+  const data = chart.data.datasets[0]?.data as { x: number }[] | undefined;
+  if (!xScale || !data) return 0;
+  const mn = xScale.min;
+  const mx = xScale.max;
+  if (mn == null || mx == null) return 0;
+  let count = 0;
+  for (let i = 0; i < data.length; i++) {
+    if (data[i].x >= mn && data[i].x <= mx) count++;
+  }
+  return count;
+};
 
 const getNearestCandlePoint = (
   chart: EnhancedChart,
@@ -404,13 +535,17 @@ const getNearestCandlePoint = (
   };
 };
 
-export default function CandlestickChart({
+export interface ChartHandle {
+  patchColor: (key: IndicatorColorKey, hex: string) => void;
+}
+
+export default forwardRef<ChartHandle, CandlestickChartProps>(function CandlestickChart({
   symbol,
   interval,
   indicators,
   measureActive,
   resetSignal,
-}: CandlestickChartProps) {
+}, ref) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartInstanceRef = useRef<EnhancedChart | null>(null);
   const rawDataRef = useRef<Candle[]>([]);
@@ -491,6 +626,7 @@ export default function CandlestickChart({
       } catch {
         /* ignore */
       }
+      chart._userMovedPan = false;
     }
     // ponytail: signal triggers only on bump; do not re-run on other deps
   }, [resetSignal]);
@@ -547,7 +683,10 @@ export default function CandlestickChart({
                   onPanStart: () => !measureActiveRef.current,
                   onPan: () => !measureActiveRef.current,
                   onPanComplete: ({ chart: c }) => {
-                    void maybeLoadMore(c as EnhancedChart);
+                    const ec = c as EnhancedChart;
+                    ec._userMovedPan = true;
+                    ec._visibleCount = visibleCandleCount(ec);
+                    void maybeLoadMore(ec);
                   },
                 },
                 zoom: {
@@ -561,7 +700,10 @@ export default function CandlestickChart({
                   drag: { enabled: false },
                   onZoomStart: () => !measureActiveRef.current,
                   onZoomComplete: ({ chart: c }) => {
-                    void maybeLoadMore(c as EnhancedChart);
+                    const ec = c as EnhancedChart;
+                    ec._userMovedPan = true;
+                    ec._visibleCount = visibleCandleCount(ec);
+                    void maybeLoadMore(ec);
                   },
                 },
                 limits: {
@@ -591,6 +733,8 @@ export default function CandlestickChart({
           _indicators: { ...inds },
           _measure: { active: mActive, start: null, end: null, preview: null },
           _volumeProfileSettings: {},
+          _userMovedPan: false,
+          _visibleCount: 0,
         });
 
         if (destroyed) {
@@ -648,6 +792,7 @@ export default function CandlestickChart({
           } catch {
             /* ignore */
           }
+          (chart as unknown as EnhancedChart)._userMovedPan = false;
         };
 
         (canvas as any)._downHandler = downHandler;
@@ -693,23 +838,8 @@ export default function CandlestickChart({
     const chart = chartInstanceRef.current;
     if (!chart || !symbol) return;
 
-    const prevData = chart.data.datasets[0]?.data as unknown[] | undefined;
-    const prevScale = chart.scales?.x;
-    let prevVisible = 0;
-    let prevLastVisibleX: number | null = null;
-    if (prevData && prevScale) {
-      const mn = prevScale.min;
-      const mx = prevScale.max;
-      if (mn != null && mx != null) {
-        for (let i = 0; i < prevData.length; i++) {
-          const x = (prevData[i] as { x: number }).x;
-          if (x >= mn && x <= mx) {
-            prevVisible++;
-            prevLastVisibleX = x;
-          }
-        }
-      }
-    }
+    const userMoved = !!chart._userMovedPan;
+    const prevVisible = chart._visibleCount || 0;
     let cancelled = false;
     (async () => {
       try {
@@ -735,20 +865,14 @@ export default function CandlestickChart({
           indicatorsRef.current,
         ) as any;
         const scales = createScales(interval, indicatorsRef.current);
-        if (prevVisible > 0 && prevLastVisibleX != null) {
-          const visibleCount = Math.min(prevVisible, raw.length);
-          (scales.x as Record<string, unknown>).min = raw[raw.length - visibleCount].x;
-          (scales.x as Record<string, unknown>).max = raw[raw.length - 1].x;
-        }
         chart.options.scales = scales as any;
         chart.update("none");
 
-        // if user was in default view, also set zoom state so the zoom plugin
-        // doesn't override our scale limits on the next interaction
-        if (prevVisible > 0 && prevLastVisibleX != null) {
+        // ponytail: preserve visible candle count the user had before switching interval
+        if (userMoved && prevVisible > 0) {
           const visibleCount = Math.min(prevVisible, raw.length);
-          const newMin = raw[raw.length - visibleCount].x;
-          const newMax = raw[raw.length - 1].x;
+          const newMin = raw[raw.length - visibleCount]!.x;
+          const newMax = raw[raw.length - 1]!.x;
           try {
             chart.zoomScale("x", { min: newMin, max: newMax }, "none");
           } catch {
@@ -769,9 +893,35 @@ export default function CandlestickChart({
 
   useEffect(() => {
     const chart = chartInstanceRef.current;
+    if (!chart || !symbol) return;
+
     const rawData = rawDataRef.current;
     const fullSeries = fullSeriesRef.current;
-    if (!chart || !symbol || !rawData.length || !fullSeries) return;
+
+    // ponytail: when only colors change, patch directly — skips buildDatasets/scale rebuild
+    const prev = chart._indicators;
+    if (prev && fullSeries && rawData.length) {
+      const sameStruct =
+        prev.bollinger === indicators.bollinger &&
+        prev.volume === indicators.volume &&
+        prev.stochRsi === indicators.stochRsi &&
+        prev.volumeProfile === indicators.volumeProfile &&
+        prev.smaEnabled === indicators.smaEnabled &&
+        prev.smaPeriod === indicators.smaPeriod &&
+        prev.emaEnabled === indicators.emaEnabled &&
+        prev.emaPeriod === indicators.emaPeriod &&
+        prev.rsiEnabled === indicators.rsiEnabled &&
+        prev.rsiPeriod === indicators.rsiPeriod;
+      if (sameStruct) {
+        chart._indicators = { ...indicators };
+        if (prev.colors !== indicators.colors) {
+          patchDatasetColors(chart, indicators);
+          chart.update("none");
+        }
+        return;
+      }
+    }
+    if (!fullSeries || !rawData.length) return;
     chart._indicators = { ...indicators };
 
     // ponytail: preserve the user's current zoom/pan so toggling an indicator doesn't reset the view
@@ -882,5 +1032,39 @@ export default function CandlestickChart({
     return () => clearInterval(id);
   }, [symbol, interval]);
 
+  useImperativeHandle(ref, () => ({
+    patchColor: (key, hex) => {
+      const chart = chartInstanceRef.current;
+      if (!chart) return;
+      const colorMap: Record<string, string[]> = {
+        sma: ["SMA "],
+        ema: ["EMA "],
+        rsi: ["RSI "],
+        stochK: ["Stoch RSI %K"],
+        stochD: ["Stoch RSI %D"],
+        bbLine: ["BB Upper", "BB Lower"],
+        bbBasis: ["BB Basis"],
+        bbFill: [],
+        stochLevelOver: ["Stoch RSI 80", "RSI 70"],
+        stochLevelUnder: ["Stoch RSI 20", "RSI 30"],
+      };
+      const prefixes = colorMap[key];
+      if (!prefixes || !prefixes.length) return;
+      const ds = chart.data.datasets;
+      for (let i = 0; i < ds.length; i++) {
+        const d = ds[i] as any;
+        const label = d.label as string | undefined;
+        if (!label) continue;
+        if (prefixes.some((p) => label.startsWith(p))) {
+          d.borderColor = hex;
+          if (key === "bbFill" && label.startsWith("BB Lower")) {
+            d.backgroundColor = hex;
+          }
+        }
+      }
+      chart.draw();
+    },
+  }), []);
+
   return <canvas ref={canvasRef} className="chart-canvas" />;
-}
+});

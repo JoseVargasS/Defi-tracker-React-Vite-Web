@@ -4,6 +4,9 @@ import {
   calculateBollingerBands,
   calculateStochRSI,
   calculateVolumeProfile,
+  calculateRSI,
+  calculateSMA,
+  calculateEMA,
   CHART_THEME,
 } from '@/lib/chart/indicators';
 import type { Candle } from '@/lib/chart/normalize';
@@ -171,5 +174,61 @@ describe('calculateVolumeProfile', () => {
     expect(result.rows).toEqual([]);
     expect(result.poc).toBeNull();
     expect(result.maxVolume).toBe(0);
+  });
+});
+
+describe('calculateRSI', () => {
+  it('returns 100 when all price changes are positive', () => {
+    const candles: Candle[] = Array.from({ length: 20 }, (_, i) => ({
+      x: i, o: i, h: i + 1, l: i - 1, c: i + 1, v: 100, q: 1000,
+    }));
+    const rsi = calculateRSI(candles, 14);
+    expect(rsi).toHaveLength(candles.length);
+    const lastVal = rsi[rsi.length - 1]?.y;
+    expect(lastVal).toBeCloseTo(100, 0);
+  });
+
+  it('returns 0 when all price changes are negative', () => {
+    const candles: Candle[] = Array.from({ length: 20 }, (_, i) => ({
+      x: i, o: 20 - i, h: 21 - i, l: 19 - i, c: 20 - i, v: 100, q: 1000,
+    }));
+    const rsi = calculateRSI(candles, 14);
+    const lastVal = rsi[rsi.length - 1]?.y;
+    expect(lastVal).toBeCloseTo(0, 0);
+  });
+
+  it('returns null for early entries (insufficient data)', () => {
+    const candles: Candle[] = Array.from({ length: 20 }, (_, i) => ({
+      x: i, o: i, h: i + 1, l: i - 1, c: i + 1, v: 100, q: 1000,
+    }));
+    const rsi = calculateRSI(candles, 14);
+    expect(rsi).toHaveLength(20);
+    expect(rsi[0]?.y).toBeNull();
+    expect(rsi[12]?.y).toBeNull();
+    expect(rsi[13]?.y).toBeNull();
+    expect(rsi[14]?.y).not.toBeNull();
+  });
+});
+
+describe('calculateSMA', () => {
+  it('returns correct SMA for period 3', () => {
+    const candles = Array.from({ length: 5 }, (_, i) => makeCandle(i, i + 1));
+    const sma = calculateSMA(candles, 3);
+    // i=0,1: null; i=2: (1+2+3)/3=2; i=3: (2+3+4)/3=3; i=4: (3+4+5)/3=4
+    expect(sma[0]?.y).toBeNull();
+    expect(sma[1]?.y).toBeNull();
+    expect(sma[2]?.y).toBeCloseTo(2, 5);
+    expect(sma[3]?.y).toBeCloseTo(3, 5);
+    expect(sma[4]?.y).toBeCloseTo(4, 5);
+  });
+});
+
+describe('calculateEMA', () => {
+  it('returns correct EMA for period 3', () => {
+    const candles = Array.from({ length: 5 }, (_, i) => makeCandle(i, i + 1));
+    const ema = calculateEMA(candles, 3);
+    expect(ema[0]?.y).toBeNull();
+    expect(ema[1]?.y).toBeNull();
+    expect(ema[2]?.y).toBeCloseTo(2, 5);
   });
 });

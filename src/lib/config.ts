@@ -15,7 +15,7 @@ export const HAS_ETHERSCAN_CONFIG = Boolean(ETH_KEY && ETH_KEY !== 'replace-me')
 
 // === App identity ===
 export const APP_NAME = 'DeFi & Crypto Terminal';
-export const APP_STORAGE_VERSION = '2026-07-07-1';
+export const APP_STORAGE_VERSION = '2026-07-10-1';
 
 // === Chart intervals ===
 // `key` is what the UI/store/cache use; `binance` is what Binance's API expects.
@@ -29,10 +29,15 @@ export interface ChartInterval {
 
 export const CHART_INTERVALS: readonly ChartInterval[] = [
   { key: '1m',  label: '1m',  binance: '1m',  barCount: 500 },
+  { key: '3m',  label: '3m',  binance: '3m',  barCount: 500 },
   { key: '5m',  label: '5m',  binance: '5m',  barCount: 500 },
   { key: '15m', label: '15m', binance: '15m', barCount: 500 },
+  { key: '30m', label: '30m', binance: '30m', barCount: 500 },
   { key: '1h',  label: '1H',  binance: '1h',  barCount: 500 },
+  { key: '2h',  label: '2H',  binance: '2h',  barCount: 500 },
   { key: '4h',  label: '4H',  binance: '4h',  barCount: 500 },
+  { key: '6h',  label: '6H',  binance: '6h',  barCount: 500 },
+  { key: '8h',  label: '8H',  binance: '8h',  barCount: 500 },
   { key: '12h', label: '12H', binance: '12h', barCount: 500 },
   { key: '1d',  label: '1D',  binance: '1d',  barCount: 1000 },
   { key: '3d',  label: '3D',  binance: '3d',  barCount: 500 },
@@ -41,6 +46,15 @@ export const CHART_INTERVALS: readonly ChartInterval[] = [
   { key: '1M',  label: '1M',  binance: '1M',  barCount: 500 },
   { key: '3M',  label: '3M',  binance: '1M',  barCount: 500, aggregate: 3 },
 ] as const;
+
+export const BINANCE_NATIVE_INTERVALS = [
+  '1m','3m','5m','15m','30m','1h','2h','4h','6h','8h','12h','1d','3d','1w','1M',
+] as const;
+export type BinanceNativeInterval = typeof BINANCE_NATIVE_INTERVALS[number];
+
+export function isValidBinanceInterval(interval: string): boolean {
+  return (BINANCE_NATIVE_INTERVALS as readonly string[]).includes(interval);
+}
 
 export const CHART_INTERVAL_KEYS = CHART_INTERVALS.map((i) => i.key);
 const BINANCE_INTERVAL_MAP: Record<string, string> = CHART_INTERVALS.reduce(

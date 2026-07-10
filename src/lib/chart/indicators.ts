@@ -1,5 +1,6 @@
 import { Candle, XY } from "./normalize";
 import { COLORS } from "@/lib/config";
+import type { ChartIndicatorsState, IndicatorColorKey, IndicatorColors } from "@/lib/chart/types";
 
 // ponytail: canvas cannot read CSS variables, so mirror the :root tokens here as hex/rgba
 export const CHART_THEME = {
@@ -18,6 +19,7 @@ export const CHART_THEME = {
   stochLevelUnder: COLORS.stochLevelUnder,
   sma: COLORS.sma,
   ema: COLORS.ema,
+  rsi: "#a78bfa",
   bbLine: COLORS.bbLine,
   bbFill: COLORS.bbFill,
   bbBasis: COLORS.bbBasis,
@@ -28,6 +30,26 @@ export const CHART_THEME = {
   plNeutral: COLORS.plNeutral,
   border: "rgba(255, 255, 255, 0.1)",
 };
+
+export const DEFAULT_INDICATOR_COLORS: IndicatorColors = {
+  sma: CHART_THEME.sma,
+  ema: CHART_THEME.ema,
+  rsi: CHART_THEME.rsi,
+  stochK: CHART_THEME.stochK,
+  stochD: CHART_THEME.stochD,
+  bbLine: CHART_THEME.bbLine,
+  bbBasis: CHART_THEME.bbBasis,
+  bbFill: CHART_THEME.bbFill,
+  stochLevelOver: CHART_THEME.stochLevelOver,
+  stochLevelUnder: CHART_THEME.stochLevelUnder,
+};
+
+export function getIndicatorColor(
+  indicators: ChartIndicatorsState,
+  key: IndicatorColorKey,
+): string {
+  return indicators.colors[key] || DEFAULT_INDICATOR_COLORS[key];
+}
 
 function calculateRSI(data: Candle[], period = 14): XY[] {
   if (!Array.isArray(data) || data.length <= period) {

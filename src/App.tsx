@@ -1,4 +1,4 @@
-import { type ChangeEvent, useEffect, useState } from 'react';
+import { type ChangeEvent, useEffect, useRef, useState } from 'react';
 import {
   Chart,
   BarController,
@@ -19,14 +19,15 @@ import { Footer } from '@/components/layout/Footer';
 import { PairSearch } from '@/components/market/PairSearch';
 import { TrackedPairs } from '@/components/market/TrackedPairs';
 import CandlestickChart from '@/components/market/CandlestickChart';
+import type { ChartHandle } from '@/components/market/CandlestickChart';
 import { WalletSection } from '@/components/wallet/WalletSection';
 import TransactionSection from '@/components/transactions/TransactionSection';
-import { migrateAppStorage, readTrackedPairs, writeTrackedPairs } from '@/lib/storage';
+import { migrateAppStorage, readTrackedPairs, writeTrackedPairs, readIndicatorColors, writeIndicatorColors } from '@/lib/storage';
 import { useMarketStore } from '@/store/useMarketStore';
 import { fetch24hStats } from '@/api/binance';
 import { formatPrice } from '@/lib/utils';
 import { compactNumber } from '@/lib/chart/normalize';
-import { APP_NAME, CHART_INTERVALS, splitPairSymbol } from '@/lib/config';
+import { APP_NAME, CHART_INTERVALS, BINANCE_NATIVE_INTERVALS, splitPairSymbol } from '@/lib/config';
 
 interface Stats24h {
   priceChange: string;
@@ -48,10 +49,17 @@ export default function App() {
   const setChartIndicator = useMarketStore((s) => s.setChartIndicator);
   const setSmaPeriod = useMarketStore((s) => s.setSmaPeriod);
   const setEmaPeriod = useMarketStore((s) => s.setEmaPeriod);
+  const setRsiEnabled = useMarketStore((s) => s.setRsiEnabled);
+  const setRsiPeriod = useMarketStore((s) => s.setRsiPeriod);
+  const setIndicatorColor = useMarketStore((s) => s.setIndicatorColor);
   const lastPrices = useMarketStore((s) => s.lastPrices);
   const [stats24h, setStats24h] = useState<Stats24h | null>(null);
   const [chartResetSignal, setChartResetSignal] = useState(0);
   const [measureActive, setMeasureActive] = useState(false);
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const colorBtnRef = useRef<HTMLButtonElement>(null);
+  const colorPopupRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<ChartHandle>(null);
 
   useEffect(() => {
     if (!currentPair) { setStats24h(null); return; }
@@ -93,6 +101,11 @@ export default function App() {
     migrateAppStorage();
     setTracked(readTrackedPairs());
 
+    const savedColors = readIndicatorColors();
+    useMarketStore.setState((state) => ({
+      chartIndicators: { ...state.chartIndicators, colors: savedColors },
+    }));
+
     Chart.register(
       BarController,
       BarElement,
@@ -108,8 +121,17 @@ export default function App() {
       CandlestickElement,
     );
 
-    const unsub = useMarketStore.subscribe((state) => {
+    const unsubTracked = useMarketStore.subscribe((state) => {
       writeTrackedPairs(state.tracked);
+    });
+    const unsubColors = useMarketStore.subscribe((state, prevState) => {
+      if (state.chartIndicators.colors !== prevState.chartIndicators.colors) {
+        clearTimeout((window as any)._colorSaveTimer);
+        (window as any)._colorSaveTimer = setTimeout(
+          () => writeIndicatorColors(state.chartIndicators.colors),
+          300,
+        );
+      }
     });
 
     const handler = (event: PromiseRejectionEvent) => {
@@ -124,24 +146,51 @@ export default function App() {
     window.addEventListener('unhandledrejection', handler);
 
     return () => {
-      unsub();
+      unsubTracked();
+      unsubColors();
+      clearTimeout((window as any)._colorSaveTimer);
       window.removeEventListener('unhandledrejection', handler);
     };
     // ponytail: mount once
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!colorPickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (
+        colorPopupRef.current &&
+        !colorPopupRef.current.contains(e.target as Node) &&
+        colorBtnRef.current &&
+        !colorBtnRef.current.contains(e.target as Node)
+      ) {
+        setColorPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [colorPickerOpen]);
+
+  const ALLOWED_PERIODS = [20, 40, 50, 75, 100, 150, 200];
+
   const handleSmaPeriod = (e: ChangeEvent<HTMLSelectElement>) => {
     const v = Number(e.target.value);
-    if (v === 100 || v === 200) setSmaPeriod(v);
+    if (ALLOWED_PERIODS.includes(v)) setSmaPeriod(v);
   };
   const handleEmaPeriod = (e: ChangeEvent<HTMLSelectElement>) => {
     const v = Number(e.target.value);
-    if (v === 100 || v === 200) setEmaPeriod(v);
+    if (ALLOWED_PERIODS.includes(v)) setEmaPeriod(v);
   };
 
   const smaSelectValue = chartIndicators.smaEnabled ? String(chartIndicators.smaPeriod) : '';
   const emaSelectValue = chartIndicators.emaEnabled ? String(chartIndicators.emaPeriod) : '';
+
+  // ponytail: 12 buttons for the most-used intervals, all others in a select
+  const buttonIntervalKeys = ['1m','5m','15m','1h','4h','12h','1d','3d','5d','1w','1M','3M'];
+  const buttonIntervals = CHART_INTERVALS.filter((iv) => buttonIntervalKeys.includes(iv.key));
+  const selectIntervals = BINANCE_NATIVE_INTERVALS.filter(
+    (iv) => !buttonIntervalKeys.includes(iv),
+  );
 
   return (
     <>
@@ -204,7 +253,7 @@ export default function App() {
                     </button>
                     <span className="chart-controls-sep" aria-hidden />
                     <div className="interval-selector" role="radiogroup" aria-label="Intervalos de velas">
-                      {CHART_INTERVALS.map((iv) => (
+                      {buttonIntervals.map((iv) => (
                         <button
                           key={iv.key}
                           type="button"
@@ -214,6 +263,17 @@ export default function App() {
                           {iv.label}
                         </button>
                       ))}
+                      <select
+                        className="indicator-select"
+                        value={selectIntervals.includes(currentInterval as any) ? currentInterval : ''}
+                        onChange={(e) => { if (e.target.value) setCurrentInterval(e.target.value); }}
+                        aria-label="Intervalos adicionales"
+                      >
+                        <option value="">+</option>
+                        {selectIntervals.map((iv) => (
+                          <option key={iv} value={iv}>{iv}</option>
+                        ))}
+                      </select>
                     </div>
                     <span className="chart-controls-sep" aria-hidden />
                     <div className="indicator-selector" aria-label="Indicadores tecnicos">
@@ -222,16 +282,32 @@ export default function App() {
                         { key: 'volume' as const, label: 'VOL' },
                         { key: 'volumeProfile' as const, label: 'VP' },
                         { key: 'stochRsi' as const, label: 'Stoch RSI' },
+                        { key: 'rsiEnabled' as const, label: 'RSI' },
                       ]).map((ind) => (
                         <button
                           key={ind.key}
                           type="button"
                           className={`chart-indicator-toggle${chartIndicators[ind.key] ? ' active' : ''}`}
-                          onClick={() => setChartIndicator(ind.key, !chartIndicators[ind.key])}
+                          onClick={() => {
+                            if (ind.key === 'rsiEnabled') setRsiEnabled(!chartIndicators.rsiEnabled);
+                            else setChartIndicator(ind.key, !chartIndicators[ind.key]);
+                          }}
                         >
                           {ind.label}
                         </button>
                       ))}
+                      {chartIndicators.rsiEnabled && (
+                        <select
+                          className="indicator-select active"
+                          value={String(chartIndicators.rsiPeriod)}
+                          onChange={(e) => setRsiPeriod(Number(e.target.value))}
+                          aria-label="RSI periodo"
+                        >
+                          {[7, 14, 21].map((p) => (
+                            <option key={p} value={p}>RSI {p}</option>
+                          ))}
+                        </select>
+                      )}
                       <select
                         className={`indicator-select${chartIndicators.smaEnabled ? ' active' : ''}`}
                         value={smaSelectValue}
@@ -244,8 +320,9 @@ export default function App() {
                         aria-label="SMA periodo"
                       >
                         <option value="">SMA</option>
-                        <option value="200">SMA 200</option>
-                        <option value="100">SMA 100</option>
+                        {ALLOWED_PERIODS.map((p) => (
+                          <option key={p} value={p}>SMA {p}</option>
+                        ))}
                       </select>
                       <select
                         className={`indicator-select${chartIndicators.emaEnabled ? ' active' : ''}`}
@@ -259,8 +336,9 @@ export default function App() {
                         aria-label="EMA periodo"
                       >
                         <option value="">EMA</option>
-                        <option value="200">EMA 200</option>
-                        <option value="100">EMA 100</option>
+                        {ALLOWED_PERIODS.map((p) => (
+                          <option key={p} value={p}>EMA {p}</option>
+                        ))}
                       </select>
                       <span className="chart-controls-sep" aria-hidden />
                       <button
@@ -273,11 +351,69 @@ export default function App() {
                       >
                         %
                       </button>
+                      <div className="color-picker-wrapper" ref={colorPopupRef}>
+                        <button
+                          type="button"
+                          ref={colorBtnRef}
+                          className={`chart-tool-button${colorPickerOpen ? ' active' : ''}`}
+                          onClick={() => setColorPickerOpen((v) => !v)}
+                          aria-label="Colores de indicadores"
+                        >
+                          🎨
+                        </button>
+                        {colorPickerOpen && (
+                          <div className="color-picker-popup">
+                            {chartIndicators.stochRsi && (
+                              <>
+                                <label className="color-picker-row">
+                                  <span className="color-label">K</span>
+                                  <input type="color" value={chartIndicators.colors.stochK} onInput={(e) => chartRef.current?.patchColor('stochK', (e.target as HTMLInputElement).value)} onChange={(e) => setIndicatorColor('stochK', (e.target as HTMLInputElement).value)} />
+                                </label>
+                                <label className="color-picker-row">
+                                  <span className="color-label">D</span>
+                                  <input type="color" value={chartIndicators.colors.stochD} onInput={(e) => chartRef.current?.patchColor('stochD', (e.target as HTMLInputElement).value)} onChange={(e) => setIndicatorColor('stochD', (e.target as HTMLInputElement).value)} />
+                                </label>
+                              </>
+                            )}
+                            {chartIndicators.rsiEnabled && (
+                              <label className="color-picker-row">
+                                <span className="color-label">RSI</span>
+                                  <input type="color" value={chartIndicators.colors.rsi} onInput={(e) => chartRef.current?.patchColor('rsi', (e.target as HTMLInputElement).value)} onChange={(e) => setIndicatorColor('rsi', (e.target as HTMLInputElement).value)} />
+                              </label>
+                            )}
+                            {chartIndicators.smaEnabled && (
+                              <label className="color-picker-row">
+                                <span className="color-label">SMA</span>
+                                  <input type="color" value={chartIndicators.colors.sma} onInput={(e) => chartRef.current?.patchColor('sma', (e.target as HTMLInputElement).value)} onChange={(e) => setIndicatorColor('sma', (e.target as HTMLInputElement).value)} />
+                              </label>
+                            )}
+                            {chartIndicators.emaEnabled && (
+                              <label className="color-picker-row">
+                                <span className="color-label">EMA</span>
+                                  <input type="color" value={chartIndicators.colors.ema} onInput={(e) => chartRef.current?.patchColor('ema', (e.target as HTMLInputElement).value)} onChange={(e) => setIndicatorColor('ema', (e.target as HTMLInputElement).value)} />
+                              </label>
+                            )}
+                            {chartIndicators.bollinger && (
+                              <>
+                                <label className="color-picker-row">
+                                  <span className="color-label">BB</span>
+                                  <input type="color" value={chartIndicators.colors.bbLine} onInput={(e) => chartRef.current?.patchColor('bbLine', (e.target as HTMLInputElement).value)} onChange={(e) => setIndicatorColor('bbLine', (e.target as HTMLInputElement).value)} />
+                                </label>
+                                <label className="color-picker-row">
+                                  <span className="color-label">Basis</span>
+                                  <input type="color" value={chartIndicators.colors.bbBasis} onInput={(e) => chartRef.current?.patchColor('bbBasis', (e.target as HTMLInputElement).value)} onChange={(e) => setIndicatorColor('bbBasis', (e.target as HTMLInputElement).value)} />
+                                </label>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-                <div id="chart-wrapper">
+              <div id="chart-wrapper">
                   <CandlestickChart
+                    ref={chartRef}
                     symbol={currentPair}
                     interval={currentInterval}
                     indicators={chartIndicators}

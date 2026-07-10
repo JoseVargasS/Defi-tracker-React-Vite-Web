@@ -4,6 +4,8 @@ import {
   writeSavedWallets,
   readTrackedPairs,
   writeTrackedPairs,
+  readIndicatorColors,
+  writeIndicatorColors,
   STORAGE_KEYS,
 } from '@/lib/storage';
 
@@ -111,5 +113,65 @@ describe('getSavedWallets / writeSavedWallets round-trip', () => {
     writeSavedWallets([VALID_ADDRESS]);
     writeSavedWallets([]);
     expect(localStorage.getItem(STORAGE_KEYS.savedWallets)).toBeNull();
+  });
+});
+
+describe('indicator colors persistence', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('readIndicatorColors returns defaults when nothing stored', () => {
+    const colors = readIndicatorColors();
+    expect(colors.sma).toBeTruthy();
+    expect(colors.rsi).toBeTruthy();
+    expect(colors.stochK).toBeTruthy();
+  });
+
+  it('writeIndicatorColors round-trips valid hex colors', () => {
+    const testColors = {
+      sma: '#ff0000',
+      ema: '#00ff00',
+      rsi: '#0000ff',
+      stochK: '#ffff00',
+      stochD: '#ff00ff',
+      bbLine: '#00ffff',
+      bbBasis: '#0f0f0f',
+      bbFill: '#f0f0f0',
+      stochLevelOver: '#ff0000',
+      stochLevelUnder: '#00ff00',
+    };
+    writeIndicatorColors(testColors);
+    const read = readIndicatorColors();
+    expect(read.sma).toBe('#ff0000');
+    expect(read.ema).toBe('#00ff00');
+    expect(read.rsi).toBe('#0000ff');
+  });
+
+  it('writeIndicatorColors rejects invalid hex values', () => {
+    writeIndicatorColors({
+      sma: '#zzzzzz',
+      ema: '#00ff00',
+      rsi: 'invalid',
+      stochK: '#ffff00',
+      stochD: '#ff00ff',
+      bbLine: '#00ffff',
+      bbBasis: '#0f0f0f',
+      bbFill: '#f0f0f0',
+      stochLevelOver: '#ff0000',
+      stochLevelUnder: '#00ff00',
+    } as any);
+    // invalid ones fall back to defaults
+    const read = readIndicatorColors();
+    expect(read.sma).not.toBe('#zzzzzz');
+    expect(read.ema).toBe('#00ff00');
+  });
+
+  it('readIndicatorColors returns all keys from DEFAULT_INDICATOR_COLORS', () => {
+    const colors = readIndicatorColors();
+    const keys: (keyof typeof colors)[] = ['sma', 'ema', 'rsi', 'stochK', 'stochD', 'bbLine', 'bbBasis', 'bbFill', 'stochLevelOver', 'stochLevelUnder'];
+    for (const key of keys) {
+      expect(colors[key]).toBeTruthy();
+    }
   });
 });

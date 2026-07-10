@@ -1,11 +1,47 @@
 import { APP_STORAGE_VERSION, DEFAULT_TRACKED_PAIRS, PAIR_SYMBOL_RE, WALLET_ADDRESS_RE } from '@/lib/config';
+import { DEFAULT_INDICATOR_COLORS } from '@/lib/chart/indicators';
+import type { IndicatorColorKey, IndicatorColors } from '@/lib/chart/types';
 
 export const STORAGE_KEYS = {
   version: 'defiTrackerStorageVersion',
   trackedPairs: 'trackedPairs',
   coinsListCache: 'coinsListCache',
   savedWallets: 'savedWallets',
+  chartIndicatorColors: 'chartIndicatorColors',
 } as const;
+
+const HEX_COLOR_RE = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+
+function sanitizeColor(value: unknown): string | null {
+  return typeof value === 'string' && HEX_COLOR_RE.test(value) ? value : null;
+}
+
+export function readIndicatorColors(): IndicatorColors {
+  const out: IndicatorColors = { ...DEFAULT_INDICATOR_COLORS };
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.chartIndicatorColors);
+    if (!raw) return out;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== 'object') return out;
+    (Object.keys(DEFAULT_INDICATOR_COLORS) as IndicatorColorKey[]).forEach((key) => {
+      const clean = sanitizeColor(parsed[key]);
+      if (clean) out[key] = clean;
+    });
+    return out;
+  } catch {
+    return out;
+  }
+}
+
+export function writeIndicatorColors(colors: IndicatorColors): IndicatorColors {
+  const out: IndicatorColors = { ...DEFAULT_INDICATOR_COLORS };
+  (Object.keys(DEFAULT_INDICATOR_COLORS) as IndicatorColorKey[]).forEach((key) => {
+    const clean = sanitizeColor(colors?.[key]);
+    if (clean) out[key] = clean;
+  });
+  localStorage.setItem(STORAGE_KEYS.chartIndicatorColors, JSON.stringify(out));
+  return out;
+}
 
 export function readSavedWallets(): string[] {
   try {
@@ -79,6 +115,7 @@ export function migrateAppStorage(): void {
   }
 
   writeSavedWallets(readSavedWallets());
+  writeIndicatorColors(readIndicatorColors());
   localStorage.setItem(STORAGE_KEYS.version, APP_STORAGE_VERSION);
 }
 

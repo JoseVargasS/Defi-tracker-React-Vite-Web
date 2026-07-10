@@ -1,5 +1,5 @@
 import type { Chart } from 'chart.js';
-import { CHART_THEME } from '@/lib/chart/indicators';
+import { CHART_THEME, DEFAULT_INDICATOR_COLORS, getIndicatorColor } from '@/lib/chart/indicators';
 import { compactNumber, type Candle } from '@/lib/chart/normalize';
 import { splitPairSymbol } from '@/lib/config';
 import type { EnhancedChart, ScaleLike, ChartDatasetLike, VPRow, CrosshairState } from '@/lib/chart/types';
@@ -30,7 +30,7 @@ const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 
 const getActiveYScale = (chart: EnhancedChart, yPosition: number) => {
-  const scales = ['price', 'volume', 'stochRsi']
+  const scales = ['price', 'volume', 'stochRsi', 'rsi']
     .map((id) => chart.scales?.[id])
     .filter(Boolean) as ScaleLike[];
   return (
@@ -327,6 +327,10 @@ export const currentPricePlugin = {
   },
 };
 
+function indColor(chartAny: EnhancedChart, key: Parameters<typeof getIndicatorColor>[1]): string {
+  return chartAny._indicators ? getIndicatorColor(chartAny._indicators, key) : DEFAULT_INDICATOR_COLORS[key];
+}
+
 export const indicatorLegendPlugin = {
   id: 'indicatorLegend',
   afterDraw(chart: Chart) {
@@ -338,6 +342,7 @@ export const indicatorLegendPlugin = {
     const ctx = chart.ctx;
     const volumeScale = chart.scales?.volume;
     const stochScale = chart.scales?.stochRsi;
+    const rsiScale = chart.scales?.rsi;
 
     ctx.save();
     ctx.font = '500 11px Inter, sans-serif';
@@ -397,28 +402,57 @@ export const indicatorLegendPlugin = {
       ctx.fillStyle = '#aeb4bd';
       ctx.fillText('STOCHRSI', x, y);
       x += ctx.measureText('STOCHRSI ').width;
-      ctx.fillStyle = CHART_THEME.stochK;
+      ctx.fillStyle = indColor(chartAny, 'stochK');
       ctx.fillText(formatIndicatorValue(kPoint?.y), x, y);
       x += ctx.measureText(`${formatIndicatorValue(kPoint?.y)}  `).width;
       ctx.fillStyle = '#aeb4bd';
       ctx.fillText('MASTOCHRSI', x, y);
       x += ctx.measureText('MASTOCHRSI ').width;
-      ctx.fillStyle = CHART_THEME.stochD;
+      ctx.fillStyle = indColor(chartAny, 'stochD');
       ctx.fillText(formatIndicatorValue(dPoint?.y), x, y);
 
       getSeparatedChipPositions(stochScale as unknown as ScaleLike, [
         {
           key: 'k',
           value: kPoint?.y,
-          color: CHART_THEME.stochK,
+          color: indColor(chartAny, 'stochK'),
         },
         {
           key: 'd',
           value: dPoint?.y,
-          color: CHART_THEME.stochD,
+          color: indColor(chartAny, 'stochD'),
         },
       ]).forEach((chip) => {
         drawValueChip(ctx, chartAny, stochScale as unknown as ScaleLike, chip.value, chip.color, chip.y);
+      });
+    }
+
+    if (isScaleVisible(rsiScale as unknown as ScaleLike)) {
+      const data = chart.data.datasets as ChartDatasetLike[];
+      const rsiLabel = data.find((d) => d.label?.startsWith('RSI '))?.label ?? 'RSI 14';
+      const rsiData = data.find((d) => d.label === rsiLabel)?.data ?? [];
+      const rsiPoints = asPoints(rsiData);
+      const rsiPoint = rsiPoints[index] || lastDefined(rsiPoints);
+      let x = chart.chartArea.left + 10;
+      const y = rsiScale.top + 7;
+
+      ctx.fillStyle = '#f5f7fa';
+      ctx.fillText(`v ${rsiLabel}`, x, y);
+      x += ctx.measureText(`v ${rsiLabel}  `).width;
+      ctx.fillStyle = '#aeb4bd';
+      ctx.fillText('RSI', x, y);
+      x += ctx.measureText('RSI ').width;
+      ctx.fillStyle = indColor(chartAny, 'rsi');
+      ctx.fillText(formatIndicatorValue(rsiPoint?.y), x, y);
+
+      getSeparatedChipPositions(rsiScale as unknown as ScaleLike, [
+        {
+          key: 'rsi',
+          value: rsiPoint?.y,
+          color: indColor(chartAny, 'rsi'),
+        },
+      ]).forEach((chip) => {
+        drawValueChip(ctx, chartAny, rsiScale as unknown as ScaleLike, chip.value, chip.color, chip.y);
       });
     }
 
@@ -435,7 +469,7 @@ export const indicatorLegendPlugin = {
       const emaPoint = priceEmaData[index] || lastDefined(priceEmaData);
 
       if (smaDs && Number.isFinite(smaPoint?.y)) {
-        ctx.fillStyle = CHART_THEME.sma;
+        ctx.fillStyle = indColor(chartAny, 'sma');
         ctx.fillText(`v SMA ${smaDs.label?.replace('SMA ', '')}`, x, y);
         const textW = ctx.measureText(`v SMA ${smaDs.label?.replace('SMA ', '')}  `).width;
         ctx.fillStyle = '#f5f7fa';
@@ -444,7 +478,7 @@ export const indicatorLegendPlugin = {
       }
 
       if (emaDs && Number.isFinite(emaPoint?.y)) {
-        ctx.fillStyle = CHART_THEME.ema;
+        ctx.fillStyle = indColor(chartAny, 'ema');
         ctx.fillText(`v EMA ${emaDs.label?.replace('EMA ', '')}`, x, y);
         const textW = ctx.measureText(`v EMA ${emaDs.label?.replace('EMA ', '')}  `).width;
         ctx.fillStyle = '#f5f7fa';

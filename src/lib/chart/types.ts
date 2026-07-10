@@ -1,5 +1,22 @@
 import type { Chart } from 'chart.js';
 
+export type IndicatorColorKey =
+  | 'sma'
+  | 'ema'
+  | 'rsi'
+  | 'stochK'
+  | 'stochD'
+  | 'bbLine'
+  | 'bbBasis'
+  | 'bbFill'
+  | 'stochLevelOver'
+  | 'stochLevelUnder';
+
+export type IndicatorColors = Record<IndicatorColorKey, string>;
+
+export const SMA_PERIOD_OPTIONS = [20, 40, 50, 75, 100, 150, 200] as const;
+export const EMA_PERIOD_OPTIONS = [20, 40, 50, 75, 100, 150, 200] as const;
+
 export interface ChartIndicatorsState {
   bollinger: boolean;
   volume: boolean;
@@ -9,6 +26,9 @@ export interface ChartIndicatorsState {
   smaPeriod: number;
   emaEnabled: boolean;
   emaPeriod: number;
+  rsiEnabled: boolean;
+  rsiPeriod: number;
+  colors: IndicatorColors;
 }
 
 export interface MeasurePoint { index: number; x: number; y: number }
@@ -50,6 +70,8 @@ export interface EnhancedChart extends Chart<'candlestick'> {
   _volumeProfileSettings: VolumeProfileSettings;
   _volumeProfile: VolumeProfileResult | null;
   _pairPrice: number | null;
+  _userMovedPan: boolean;
+  _visibleCount: number;
   crosshair: CrosshairState;
 }
 
