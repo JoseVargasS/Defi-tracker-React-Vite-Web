@@ -12,7 +12,6 @@ import {
   type VolumeProfileResult,
   type CrosshairState,
   type PartialCrosshairState,
-  type EventfulCanvas,
   type ScaleLike,
   type ChartDatasetLike,
 } from '@/lib/chart/types';
