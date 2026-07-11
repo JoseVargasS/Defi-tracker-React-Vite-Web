@@ -1,12 +1,13 @@
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import type { ReactNode } from 'react';
 
 function GoodChild() {
   return <div>child content</div>;
 }
 
-function BadChild() {
+function BadChild(): ReactNode {
   throw new Error('test error');
 }
 
