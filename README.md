@@ -7,7 +7,7 @@ App web para consultar balances de wallets EVM, revisar transacciones en Ethereu
 - React 19 + TypeScript 5.8 + Vite 6
 - Chart.js + `chartjs-chart-financial` + `chartjs-adapter-date-fns` + `chartjs-plugin-zoom`
 - Zustand para estado global
-- Vitest para tests unitarios (183 tests)
+- Vitest para tests unitarios (299 tests)
 - Playwright declarado en `package.json` (sin specs todavia)
 - APIs: Binance Spot, Etherscan v2, CoinStats Open API
 
@@ -53,17 +53,17 @@ src/
   store/            stores Zustand: market, wallet, transactions (este solo tipos)
   test/             setup de Vitest (jsdom, jest-dom)
   styles/           CSS por dominio
-  __tests__/unit/   tests Vitest (12 archivos, 183 tests)
+  __tests__/unit/   tests Vitest (25 archivos, 299 tests, ~50% coverage)
 ```
 
 Detalles de archivos, reglas de edicion y arquitectura de la grafica: ver `AGENTS.md`.
 
 ## Tests
 
-- 12 archivos de test, 183 tests
+- 25 archivos de test, 299 tests, ~50% coverage
 - Coverage: `npm run test:coverage`
 - Mocks via `vi.mock('@/api/client')` (no `vi.stubGlobal('fetch')`)
-- Test files: utils, storage, normalize, indicators, binance, client, coinstats, etherscan, prices, stores, assets, useInterval
+- Test files: utils, storage, normalize, indicators, binance, client, coinstats, etherscan, prices, stores, assets, useInterval, chartTypes, App, ErrorBoundary, Header, Footer, PairSearch, TrackedPairs, TransactionSection, TransactionTable, WalletSection, WalletDashboard, ChainCard, ZeroValueToggle
 
 ## Deploy
 

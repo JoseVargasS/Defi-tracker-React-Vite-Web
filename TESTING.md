@@ -8,7 +8,7 @@ npm run test:watch       # watch mode
 npm run test:coverage    # con coverage v8
 ```
 
-Cobertura actual en `src/__tests__/unit/` (12 archivos, 183 tests):
+Cobertura actual en `src/__tests__/unit/` (25 archivos, 299 tests, ~50% coverage):
 
 - `utils.test.ts` — `formatPrice`, `escapeHTML`, `safeErrorMessage`, `apiStatusMessage`, `mapWithConcurrency`, `integerAmountToNumber`.
 - `storage.test.ts` — `readSavedWallets`, `writeSavedWallets`, `readTrackedPairs`, `writeTrackedPairs`, `readIndicatorColors`, `writeIndicatorColors`, `migrateAppStorage`, `clearAppStorage`, versionado por `APP_STORAGE_VERSION`.
@@ -22,6 +22,19 @@ Cobertura actual en `src/__tests__/unit/` (12 archivos, 183 tests):
 - `stores.test.ts` — `useMarketStore` (all actions), `useWalletStore` (all actions).
 - `assets.test.ts` — `COIN_ICON_URLS`, `TOKEN_ICON_FALLBACKS`, `coinDisplayName`, `tokenIconUrl`.
 - `useInterval.test.ts` — callback, delay null, immediate, cleanup, ref update.
+- `chartTypes.test.ts` — `SMA_PERIOD_OPTIONS`, `EMA_PERIOD_OPTIONS`, interfaces y tipos (`IndicatorColors`, `ChartIndicatorsState`, `MeasureState`, `VPRow`, `CrosshairState`, etc).
+- `App.test.tsx` — tabs Mercado/Wallet, intervalos, indicadores (BB/VOL/SMA/EMA), measure tool, color picker, reset zoom, empty state.
+- `ErrorBoundary.test.tsx` — renderiza children sin error, captura errores y muestra UI, boton recargar.
+- `Header.test.tsx` — logo, titulo "Portfolio terminal", header element.
+- `Footer.test.tsx` — links Usual Money y Josesitooo, atribucion.
+- `PairSearch.test.tsx` — busqueda por texto, filtrado de suggestions, seleccion de par, limpieza.
+- `TrackedPairs.test.tsx` — render pares, click para seleccionar, delete, precios formateados, cambio %.
+- `TransactionSection.test.tsx` — fetch ETH/Base por chain, empty state, tabla mockeada.
+- `TransactionTable.test.tsx` — empty state, loading, agrupacion por fecha, montos, P&L, paginacion.
+- `WalletSection.test.tsx` — input wallet, validacion de direccion, error, loading, saved wallets, dashboard, copy.
+- `WalletDashboard.test.tsx` — total worth formateado, sorting de chains, ChainCard rendering.
+- `ChainCard.test.tsx` — tokens con icono/fallback, precios (especiales, null, ETH 6 decimales), ZeroValueToggle.
+- `ZeroValueToggle.test.tsx` — toggle open/close, iconos +/-, muestra/oculta hijos.
 
 Cuando agregues logica nueva:
 

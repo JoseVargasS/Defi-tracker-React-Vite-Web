@@ -15,7 +15,7 @@ App React + Vite + TypeScript llamada **DeFi & Crypto Terminal**. Sirve para:
 - React 19 + TypeScript 5.8 + Vite 6
 - Chart.js + chartjs-chart-financial + chartjs-adapter-date-fns
 - Zustand para estado global
-- Vitest para tests unitarios (183 tests, 12 archivos)
+- Vitest para tests unitarios (299 tests, 25 archivos)
 - Playwright para E2E (declarado, sin specs)
 - APIs: Binance Spot, Etherscan v2, CoinStats Open API
 
@@ -84,7 +84,7 @@ src/
 │   ├── crypto.css              Watchlist, mercado, chart
 │   ├── transactions.css        Tablas de transacciones
 │   └── responsive.css          Breakpoints
-└── __tests__/unit/             Tests Vitest
+└── __tests__/unit/             Tests Vitest (25 archivos, 299 tests)
     ├── utils.test.ts           formatPrice, escapeHTML, safeImageUrl, etc
     ├── storage.test.ts         localStorage, migracion, colores
     ├── normalize.test.ts       normalizeKline, compactNumber
@@ -96,7 +96,20 @@ src/
     ├── prices.test.ts          getTokenPriceUSD, getHistoricalTokenPriceUSD
     ├── stores.test.ts          useMarketStore, useWalletStore
     ├── assets.test.ts          COIN_ICON_URLS, tokenIconUrl, coinDisplayName
-    └── useInterval.test.ts     callback, delay null, immediate, cleanup
+    ├── useInterval.test.ts     callback, delay null, immediate, cleanup
+    ├── chartTypes.test.ts      SMA_PERIOD_OPTIONS, interfaces y tipos de Chart
+    ├── App.test.tsx            tabs, intervalos, indicadores, empty state
+    ├── ErrorBoundary.test.tsx  renderiza children, captura errores, UI de error
+    ├── Header.test.tsx         logo, titulo, header element
+    ├── Footer.test.tsx         links, atribucion
+    ├── PairSearch.test.tsx     busqueda, seleccion, limpieza, sin resultados
+    ├── TrackedPairs.test.tsx   render, click, delete, precios, cambio %
+    ├── TransactionSection.test.tsx  fetch por chain, empty state, tablas
+    ├── TransactionTable.test.tsx    empty, loading, fechas, montos, P&L, paginacion
+    ├── WalletSection.test.tsx       input, validacion, error, loading, saved wallets
+    ├── WalletDashboard.test.tsx     total worth, sorting de chains, ChainCard
+    ├── ChainCard.test.tsx           tokens, precios, formateo, ZeroValueToggle
+    └── ZeroValueToggle.test.tsx     toggle open/close, iconos +/-, muestra hijos
 ```
 
 ## Reglas de edicion
