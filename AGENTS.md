@@ -223,3 +223,57 @@ Reglas:
 - cada bullet en una sola linea (sin wrap)
 - nombre de archivo sin ruta (ej. `binance.ts`, no `src/api/binance.ts`)
 - explicar el comportamiento, no el como interno
+
+## Agent behavior rules
+
+### Language
+
+- **Always respond in Peruvian Spanish** (tuteo, no vosotros). Use natural Peruvian expressions when fitting. Avoid regionalisms from Spain, Argentina, or other LatAm countries.
+- Technical terms and code stay in English. Explanations, commit messages, and user-facing text are in Spanish.
+
+### When writing code
+
+- **Never hardcode values.** Extract magic numbers, strings, URLs, and colors into named constants or config. Single source of truth.
+- Follow existing patterns in the codebase. If there's a convention for a file, match it exactly.
+- Use `context7` skill to fetch up-to-date documentation for any library or framework before writing code that depends on it.
+- Use `karpathy-guidelines` skill to avoid common LLM coding mistakes (overcomplication, unnecessary abstractions, etc.).
+- Prefer `ponytail` skill for keeping solutions minimal and lazy. Question whether the task needs to exist at all before writing code.
+- Zero `as any`. Use `as unknown as TargetType` or inline types when Chart.js requires casts.
+- No dead code, no commented-out blocks, no TODO comments that aren't actionable.
+- Every new module must have corresponding tests. Pure functions get direct tests; components get `@testing-library/react` tests.
+
+### When auditing or reviewing code
+
+- **Always load `keystone` skill first.** It enforces codebase hardening: architecture audit, dead code removal, standard compliance, test coverage.
+- Load `code-reviewer` skill for structured review feedback.
+- Load `ponytail-review` or `ponytail-audit` to find over-engineering and unnecessary complexity.
+- **Do not break existing functionality** unless the user explicitly asks for a breaking change. If a refactor risks breaking behavior, ask first.
+- Preserve all existing tests. If a change would break a test, fix the test to match the new behavior (unless the test was wrong to begin with).
+- Hyper-fluidity: changes should feel seamless. No jarring renames, no moved exports, no reordered imports unless part of a focused cleanup.
+- Maintainability over cleverness. Readable code > compact code.
+
+### When designing UI or frontend
+
+- **Always load `impeccable` skill** for any UI polish, redesign, or visual improvement task.
+- Load `design-taste-frontend` (or `design-taste-frontend-v1` for backward compat) for landing pages, component design, and anti-generic aesthetics.
+- Load `emil-design-eng` for animation decisions and invisible polish details.
+- Load `ui-ux-pro-max` for comprehensive UI/UX guidance across styles, color palettes, and product types.
+- Load `frontend-design` for distinctive, production-grade interfaces.
+- Never use generic AI aesthetics. Every design decision should feel intentional and human-directed.
+- Respect existing design tokens (`CHART_THEME`, CSS variables). Don't introduce new color systems or spacing scales.
+- Test responsive behavior at 1024px, 768px, and 480px before claiming UI work is done.
+
+### When writing tests
+
+- Mock at the module boundary (`vi.mock('@/api/client')`), never at the global level (`vi.stubGlobal('fetch')`).
+- Tests should verify behavior, not implementation details.
+- Prefer `verification-before-completion` skill before claiming tests pass.
+- New features must ship with tests. No exceptions.
+
+### General agent discipline
+
+- Load `commit-policy` skill. Never commit, push, or create PRs unless the user explicitly says so.
+- Load `mimocode` skill when unsure about any MiMoCode feature (memory, agents, workflows, config).
+- When research is needed, load `deep-research` or `super-research` skill depending on scope.
+- For multi-file changes, enter plan mode first. Confirm the plan before implementing.
+- One logical change per commit. Don't mix unrelated changes.
