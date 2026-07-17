@@ -280,6 +280,47 @@ footer a:hover {
   margin: 0;
 }
 
+/* Error boundary */
+.error-boundary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 16px;
+  background: #030405;
+  color: #d6dbe1;
+  font-family: Inter, sans-serif;
+}
+
+.error-boundary h2 {
+  color: var(--negative);
+  margin: 0;
+}
+
+.error-boundary-msg {
+  color: var(--ink-3);
+  margin: 0;
+  max-width: 420px;
+  text-align: center;
+}
+
+.error-boundary-btn {
+  margin-top: 8px;
+  padding: 10px 24px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--ink-1);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.error-boundary-btn:hover {
+  background: var(--surface-3);
+}
+
 /* Animations */
 @keyframes fadeIn {
   from { opacity: 0; }
