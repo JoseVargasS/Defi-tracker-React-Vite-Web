@@ -19,8 +19,11 @@ export interface ChartIndicatorsState {
   colors: Record<IndicatorColorKey, string>;
 }
 
+export type ChartMode = 'chartjs' | 'tradingview';
+
 interface MarketState {
   activeView: 'market' | 'wallet';
+  chartMode: ChartMode;
   tracked: string[];
   currentPair: string | null;
   currentInterval: string;
@@ -29,6 +32,7 @@ interface MarketState {
   coinsList: unknown[];
 
   setActiveView: (view: 'market' | 'wallet') => void;
+  setChartMode: (mode: ChartMode) => void;
   setTracked: (pairs: string[]) => void;
   addTracked: (pair: string) => void;
   removeTracked: (pair: string) => void;
@@ -46,6 +50,7 @@ interface MarketState {
 
 export const useMarketStore = create<MarketState>((set) => ({
   activeView: 'market',
+  chartMode: 'tradingview',
   tracked: [...DEFAULT_TRACKED_PAIRS],
   currentPair: null,
   currentInterval: '1d',
@@ -66,6 +71,7 @@ export const useMarketStore = create<MarketState>((set) => ({
   coinsList: [],
 
   setActiveView: (view) => set({ activeView: view }),
+  setChartMode: (mode) => set({ chartMode: mode }),
   setTracked: (pairs) => set({ tracked: pairs }),
   addTracked: (pair) =>
     set((state) => ({

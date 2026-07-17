@@ -20,6 +20,7 @@ import { PairSearch } from '@/components/market/PairSearch';
 import { TrackedPairs } from '@/components/market/TrackedPairs';
 import CandlestickChart from '@/components/market/CandlestickChart';
 import type { ChartHandle } from '@/components/market/CandlestickChart';
+import TradingViewWidget from '@/components/market/TradingViewWidget';
 import { WalletSection } from '@/components/wallet/WalletSection';
 import TransactionSection from '@/components/transactions/TransactionSection';
 import { migrateAppStorage, readTrackedPairs, writeTrackedPairs, readIndicatorColors, writeIndicatorColors } from '@/lib/storage';
@@ -42,6 +43,8 @@ interface Stats24h {
 export default function App() {
   const activeView = useMarketStore((s) => s.activeView);
   const setActiveView = useMarketStore((s) => s.setActiveView);
+  const chartMode = useMarketStore((s) => s.chartMode);
+  const setChartMode = useMarketStore((s) => s.setChartMode);
   const setTracked = useMarketStore((s) => s.setTracked);
   const currentPair = useMarketStore((s) => s.currentPair);
   const currentInterval = useMarketStore((s) => s.currentInterval);
@@ -254,6 +257,23 @@ export default function App() {
                       </svg>
                     </button>
                     <span className="chart-controls-sep" aria-hidden />
+                    <div className="chart-mode-toggle" role="radiogroup" aria-label="Tipo de grafica">
+                      <button
+                        type="button"
+                        className={chartMode === 'chartjs' ? 'active' : ''}
+                        onClick={() => setChartMode('chartjs')}
+                      >
+                        Chart.js
+                      </button>
+                      <button
+                        type="button"
+                        className={chartMode === 'tradingview' ? 'active' : ''}
+                        onClick={() => setChartMode('tradingview')}
+                      >
+                        TradingView
+                      </button>
+                    </div>
+                    <span className="chart-controls-sep" aria-hidden />
                     <div className="interval-selector" role="radiogroup" aria-label="Intervalos de velas">
                       {buttonIntervals.map((iv) => (
                         <button
@@ -414,14 +434,18 @@ export default function App() {
                   </div>
                 </div>
               <div id="chart-wrapper">
-                  <CandlestickChart
-                    ref={chartRef}
-                    symbol={currentPair}
-                    interval={currentInterval}
-                    indicators={chartIndicators}
-                    measureActive={measureActive}
-                    resetSignal={chartResetSignal}
-                  />
+                  {chartMode === 'chartjs' ? (
+                    <CandlestickChart
+                      ref={chartRef}
+                      symbol={currentPair}
+                      interval={currentInterval}
+                      indicators={chartIndicators}
+                      measureActive={measureActive}
+                      resetSignal={chartResetSignal}
+                    />
+                  ) : (
+                    <TradingViewWidget key={`${currentPair}-${currentInterval}`} symbol={currentPair} interval={currentInterval} />
+                  )}
                 </div>
               </>
             ) : (

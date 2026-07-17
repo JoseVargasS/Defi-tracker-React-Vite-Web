@@ -427,11 +427,45 @@
   color: var(--positive);
 }
 
+.chart-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.chart-mode-toggle button {
+  height: 22px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-3);
+  font-size: 0.68rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+
+.chart-mode-toggle button.active {
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+.chart-mode-toggle button:hover:not(.active) {
+  background: var(--surface-2);
+  color: var(--ink-1);
+}
+
 #chart-wrapper {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
+  height: 100%;
   background: var(--bg);
   overflow: hidden;
   cursor: crosshair;

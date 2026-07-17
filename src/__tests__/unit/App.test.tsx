@@ -35,6 +35,12 @@ vi.mock('@/components/market/CandlestickChart', () => ({
   ),
 }));
 
+vi.mock('@/components/market/TradingViewWidget', () => ({
+  default: ({ symbol }: { symbol: string | null }) => (
+    <div data-testid="tradingview-widget">{symbol || 'no pair'}</div>
+  ),
+}));
+
 vi.mock('@/components/wallet/WalletSection', () => ({
   WalletSection: () => <div data-testid="wallet-section">WalletSection</div>,
 }));
@@ -68,6 +74,7 @@ describe('App', () => {
   beforeEach(() => {
     useMarketStore.setState({
       activeView: 'market',
+      chartMode: 'tradingview',
       tracked: [],
       currentPair: null,
       currentInterval: '1d',
@@ -238,5 +245,34 @@ describe('App', () => {
     useMarketStore.setState({ currentPair: 'BTCUSDT' });
     render(<App />);
     expect(screen.getByLabelText('Restablecer zoom del chart')).toBeTruthy();
+  });
+
+  it('renders TradingView widget by default', () => {
+    useMarketStore.setState({ currentPair: 'BTCUSDT' });
+    render(<App />);
+    expect(screen.getByTestId('tradingview-widget')).toBeTruthy();
+  });
+
+  it('renders CandlestickChart when chartjs mode selected', () => {
+    useMarketStore.setState({ currentPair: 'BTCUSDT', chartMode: 'chartjs' });
+    render(<App />);
+    expect(screen.getByTestId('candlestick-chart')).toBeTruthy();
+  });
+
+  it('switches between chart modes using toggle', () => {
+    useMarketStore.setState({ currentPair: 'BTCUSDT', chartMode: 'tradingview' });
+    render(<App />);
+    expect(screen.getByTestId('tradingview-widget')).toBeTruthy();
+    fireEvent.click(screen.getByText('Chart.js'));
+    expect(useMarketStore.getState().chartMode).toBe('chartjs');
+    fireEvent.click(screen.getByText('TradingView'));
+    expect(useMarketStore.getState().chartMode).toBe('tradingview');
+  });
+
+  it('renders chart mode toggle buttons', () => {
+    useMarketStore.setState({ currentPair: 'BTCUSDT' });
+    render(<App />);
+    expect(screen.getByText('Chart.js')).toBeTruthy();
+    expect(screen.getByText('TradingView')).toBeTruthy();
   });
 });

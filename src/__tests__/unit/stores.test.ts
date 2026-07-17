@@ -5,6 +5,7 @@ import { useWalletStore } from '@/store/useWalletStore';
 beforeEach(() => {
   useMarketStore.setState({
     activeView: 'market',
+    chartMode: 'tradingview',
     tracked: ['ETHUSDT', 'BTCUSDT', 'USUALUSDT', 'VELODROMEUSDT', 'BATUSDT', 'BIOUSDT'],
     currentPair: null,
     currentInterval: '1d',
@@ -38,6 +39,7 @@ describe('useMarketStore', () => {
   it('has correct initial state', () => {
     const state = useMarketStore.getState();
     expect(state.activeView).toBe('market');
+    expect(state.chartMode).toBe('tradingview');
     expect(state.currentPair).toBeNull();
     expect(state.currentInterval).toBe('1d');
     expect(state.tracked.length).toBe(6);
@@ -46,6 +48,13 @@ describe('useMarketStore', () => {
   it('setActiveView toggles view', () => {
     useMarketStore.getState().setActiveView('wallet');
     expect(useMarketStore.getState().activeView).toBe('wallet');
+  });
+
+  it('setChartMode switches chart mode', () => {
+    useMarketStore.getState().setChartMode('chartjs');
+    expect(useMarketStore.getState().chartMode).toBe('chartjs');
+    useMarketStore.getState().setChartMode('tradingview');
+    expect(useMarketStore.getState().chartMode).toBe('tradingview');
   });
 
   it('setTracked replaces pair list', () => {
