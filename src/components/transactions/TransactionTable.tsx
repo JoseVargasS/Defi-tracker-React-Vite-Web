@@ -137,7 +137,7 @@ export default function TransactionTable({ txs, onLoadMore, hasMore, loading, ti
       </div>
       {hasMore && (
         <div className="load-more">
-          <button onClick={onLoadMore} disabled={loading}>Ver mas</button>
+          <button type="button" onClick={onLoadMore} disabled={loading}>Ver mas</button>
         </div>
       )}
     </div>

@@ -253,10 +253,10 @@ describe('App', () => {
     expect(screen.getByTestId('tradingview-widget')).toBeTruthy();
   });
 
-  it('renders CandlestickChart when chartjs mode selected', () => {
+  it('renders CandlestickChart when chartjs mode selected', async () => {
     useMarketStore.setState({ currentPair: 'BTCUSDT', chartMode: 'chartjs' });
     render(<App />);
-    expect(screen.getByTestId('candlestick-chart')).toBeTruthy();
+    expect(await screen.findByTestId('candlestick-chart')).toBeTruthy();
   });
 
   it('switches between chart modes using toggle', () => {

@@ -236,9 +236,12 @@ export async function fetchCoinsList(): Promise<CoinInfo[]> {
         isSpotTradingAllowed: boolean;
       }[];
     };
-    const coinsList = (res.symbols || [])
-      .filter((s) => s.status === 'TRADING' && s.isSpotTradingAllowed)
-      .map((s) => ({ symbol: s.symbol, base: s.baseAsset, quote: s.quoteAsset }));
+    const coinsList: { symbol: string; base: string; quote: string }[] = [];
+    for (const s of (res.symbols || [])) {
+      if (s.status === 'TRADING' && s.isSpotTradingAllowed) {
+        coinsList.push({ symbol: s.symbol, base: s.baseAsset, quote: s.quoteAsset });
+      }
+    }
     
     localStorage.setItem(
       STORAGE_KEYS.coinsListCache,

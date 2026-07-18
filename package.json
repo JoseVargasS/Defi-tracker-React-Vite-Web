@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "ci": "npm run typecheck && npm run lint && npm test"
+    "ci": "npm run typecheck && npm run lint && npm test",
+    "doctor": "npx react-doctor@latest"
   },
   "dependencies": {
     "chart.js": "^4.4.8",

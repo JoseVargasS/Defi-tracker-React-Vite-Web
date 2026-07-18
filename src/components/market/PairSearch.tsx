@@ -5,6 +5,8 @@ import { useMarketStore } from '@/store/useMarketStore';
 const pairLabel = (coin: Coin) => `${coin.base}/${coin.quote}`;
 const pairSearchText = (coin: Coin) =>
   `${coin.symbol} ${coin.base} ${coin.quote} ${pairLabel(coin)}`;
+const coinMatches = (coin: Coin, upper: string, normalized: string) =>
+  pairSearchText(coin).includes(upper) || coin.symbol.includes(normalized);
 
 export function PairSearch() {
   const [query, setQuery] = useState('');
@@ -37,9 +39,13 @@ export function PairSearch() {
       const upper = q.trim().toUpperCase();
       const normalized = upper.replace(/[^A-Z0-9]/g, '');
       const coins = coinsList as Coin[];
-      const matches = coins
-        .filter((c) => pairSearchText(c).includes(upper) || c.symbol.includes(normalized))
-        .slice(0, 10);
+      const matches: Coin[] = [];
+      for (let i = 0; i < coins.length && matches.length < 10; i++) {
+        const c = coins[i];
+        if (coinMatches(c, upper, normalized)) {
+          matches.push(c);
+        }
+      }
       setSuggestions(matches);
       setShow(true);
     },
@@ -82,9 +88,13 @@ export function PairSearch() {
           <div>No se encontraron pares.</div>
         ) : (
           suggestions.map((coin) => (
-            <div key={coin.symbol} onClick={() => handleSelect(coin)}>
+            <button
+              type="button"
+              key={coin.symbol}
+              onClick={() => handleSelect(coin)}
+            >
               {pairLabel(coin)}
-            </div>
+            </button>
           ))
         )}
       </div>

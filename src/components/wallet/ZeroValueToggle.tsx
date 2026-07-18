@@ -5,7 +5,13 @@ export function ZeroValueToggle({ count, children }: { count: number; children: 
 
   return (
     <>
-      <tr className="tx-zero-toggle" onClick={() => setOpen(v => !v)}>
+      <tr
+        className="tx-zero-toggle"
+        role="button"
+        tabIndex={0}
+        onClick={() => setOpen(v => !v)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(v => !v); } }}
+      >
         <td colSpan={4}>
           <span className="tx-zero-icon">{open ? '×' : '+'}</span>
           {' '}{count} tokens sin valor

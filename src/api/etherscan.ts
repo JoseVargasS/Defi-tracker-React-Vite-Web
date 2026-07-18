@@ -75,15 +75,18 @@ export async function getTokenBalances(
       balances.set(contract, current);
     }
 
-    const result = Array.from(balances.values())
-      .filter(b => b.tokenBalance > 0)
-      .map(b => ({
-        contractAddress: b.contractAddress,
-        tokenBalance: b.tokenBalance.toString(),
-        tokenName: b.tokenName,
-        tokenSymbol: b.tokenSymbol,
-        tokenDecimal: b.tokenDecimal,
-      }));
+    const result: { contractAddress: string; tokenBalance: string; tokenName: string; tokenSymbol: string; tokenDecimal: string }[] = [];
+    for (const b of Array.from(balances.values())) {
+      if (b.tokenBalance > 0) {
+        result.push({
+          contractAddress: b.contractAddress,
+          tokenBalance: b.tokenBalance.toString(),
+          tokenName: b.tokenName,
+          tokenSymbol: b.tokenSymbol,
+          tokenDecimal: b.tokenDecimal,
+        });
+      }
+    }
 
     return { result };
   } catch {

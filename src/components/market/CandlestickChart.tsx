@@ -1,21 +1,35 @@
 // ponytail: Chart.js types are stricter than our local ChartDatasetLike; casts are intentional
 import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
-import {
-  Chart,
-  BarController,
-  BarElement,
-  LineController,
-  LineElement,
-  PointElement,
-  LinearScale,
-  TimeScale,
-  CategoryScale,
-  Tooltip,
-  Filler,
-} from "chart.js";
-import zoomPlugin from "chartjs-plugin-zoom";
-import "chartjs-adapter-date-fns";
-import "chartjs-chart-financial";
+
+// ponytail: dynamic import avoids eager bundling of chart.js per react-doctor/prefer-dynamic-import
+let _ChartCtor: (new (ctx: CanvasRenderingContext2D, config: Record<string, unknown>) => EnhancedChart) | null = null;
+
+const _chartReady = (async () => {
+  const [chartjs, fin, zoom] = await Promise.all([
+    import("chart.js"),
+    import("chartjs-chart-financial"),
+    import("chartjs-plugin-zoom"),
+  ]);
+  await import("chartjs-adapter-date-fns");
+
+  _ChartCtor = chartjs.Chart as unknown as NonNullable<typeof _ChartCtor>;
+
+  chartjs.Chart.register(
+    chartjs.BarController,
+    chartjs.BarElement,
+    chartjs.LineController,
+    chartjs.LineElement,
+    chartjs.PointElement,
+    chartjs.LinearScale,
+    chartjs.TimeScale,
+    chartjs.CategoryScale,
+    chartjs.Tooltip,
+    chartjs.Filler,
+    fin.CandlestickController,
+    fin.CandlestickElement,
+    (zoom as { default?: unknown }).default ?? zoom,
+  );
+})();
 import { fetchKlines, fetchLatestKlines } from "@/api/binance";
 import type { Candle, XY, KlineRaw } from "@/lib/chart/normalize";
 import { normalizeKline } from "@/lib/chart/normalize";
@@ -50,23 +64,8 @@ import type {
   ChartDatasetLike,
   IndicatorColorKey,
   MeasurePoint,
-  EventfulCanvas,
 } from "@/lib/chart/types";
 import type { ChartIndicatorsState } from "@/lib/chart/types";
-
-Chart.register(
-  BarController,
-  BarElement,
-  LineController,
-  LineElement,
-  PointElement,
-  LinearScale,
-  TimeScale,
-  CategoryScale,
-  Tooltip,
-  Filler,
-  zoomPlugin,
-);
 
 export interface CandlestickChartProps {
   symbol: string | null;
@@ -562,8 +561,10 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
   const measureActiveRef = useRef(measureActive);
   const loadingMoreRef = useRef(false);
 
-  indicatorsRef.current = indicators;
-  measureActiveRef.current = measureActive;
+  useEffect(() => {
+    indicatorsRef.current = indicators;
+    measureActiveRef.current = measureActive;
+  });
 
   // ponytail: when the user pans or zooms close to the leftmost edge, paginate more history from Binance
   const maybeLoadMore = useCallback(async (chart: EnhancedChart) => {
@@ -649,8 +650,64 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
 
     let destroyed = false;
 
+    const downHandler = (event: PointerEvent) => {
+      if (!measureActiveRef.current) return;
+      const c = chartInstanceRef.current;
+      const m = c?._measure;
+      if (!m?.active || !c) return;
+      const rect = canvas.getBoundingClientRect();
+      const point = getNearestCandlePoint(
+        c,
+        event.clientX - rect.left,
+        event.clientY - rect.top,
+      );
+      if (!point) return;
+      if (!m.start || m.end) {
+        m.start = point;
+        m.end = null;
+        m.preview = null;
+      } else {
+        m.end = point;
+        m.preview = null;
+      }
+      c.update("none");
+    };
+
+    const moveHandler = (event: PointerEvent) => {
+      if (!measureActiveRef.current) return;
+      const c = chartInstanceRef.current;
+      const m = c?._measure;
+      if (!c || !m?.active) return;
+      if (m.start && !m.end) {
+        const rect = canvas.getBoundingClientRect();
+        m.preview = getNearestCandlePoint(
+          c,
+          event.clientX - rect.left,
+          event.clientY - rect.top,
+        );
+        c.update("none");
+      }
+    };
+
+    const dblClickHandler = () => {
+      const c = chartInstanceRef.current;
+      if (!c) return;
+      try {
+        c.resetZoom("default");
+      } catch {
+        /* ignore */
+      }
+      c._userMovedPan = false;
+    };
+
+    canvas.addEventListener("pointerdown", downHandler);
+    canvas.addEventListener("pointermove", moveHandler);
+    canvas.addEventListener("dblclick", dblClickHandler);
+
     (async () => {
       try {
+        await _chartReady;
+        const ChartCtor = _ChartCtor!;
         const fetchCount = intervalBarCount(interval);
         const raw = (await fetchKlines(symbol, interval, fetchCount))
           .map((k) => normalizeKline(k as unknown as KlineRaw))
@@ -668,7 +725,7 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
         const ctx = canvas.getContext("2d");
         if (!ctx || destroyed) return;
 
-        const chart = new Chart(ctx, {
+        const chart = new ChartCtor(ctx, {
           type: "candlestick",
           data: {
             datasets: buildDatasets(symbol, raw, fullSeries, inds) as never,
@@ -751,65 +808,6 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
         }
 
         chartInstanceRef.current = enhanced;
-
-        // ponytail: measure tool replaces the plugin while active; only one system handles input at a time
-        const downHandler = (event: PointerEvent) => {
-          if (!measureActiveRef.current) return;
-          const c = chartInstanceRef.current;
-          const m = c?._measure;
-          if (!m?.active || !c) return;
-
-          const rect = canvas.getBoundingClientRect();
-          const point = getNearestCandlePoint(
-            c,
-            event.clientX - rect.left,
-            event.clientY - rect.top,
-          );
-          if (!point) return;
-
-          if (!m.start || m.end) {
-            m.start = point;
-            m.end = null;
-            m.preview = null;
-          } else {
-            m.end = point;
-            m.preview = null;
-          }
-          c.update("none");
-        };
-
-        const moveHandler = (event: PointerEvent) => {
-          if (!measureActiveRef.current) return;
-          const c = chartInstanceRef.current;
-          const m = c?._measure;
-          if (!c || !m?.active) return;
-          if (m.start && !m.end) {
-            const rect = canvas.getBoundingClientRect();
-            m.preview = getNearestCandlePoint(
-              c,
-              event.clientX - rect.left,
-              event.clientY - rect.top,
-            );
-            c.update("none");
-          }
-        };
-
-        const dblClickHandler = () => {
-          try {
-            chart.resetZoom("default");
-          } catch {
-            /* ignore */
-          }
-          (chart as unknown as EnhancedChart)._userMovedPan = false;
-        };
-
-        (canvas as unknown as EventfulCanvas)._downHandler = downHandler;
-        (canvas as unknown as EventfulCanvas)._moveHandler = moveHandler;
-        (canvas as unknown as EventfulCanvas)._dblClickHandler = dblClickHandler;
-
-        canvas.addEventListener("pointerdown", downHandler);
-        canvas.addEventListener("pointermove", moveHandler);
-        canvas.addEventListener("dblclick", dblClickHandler);
       } catch (err) {
         if (!destroyed) console.error("CandlestickChart fetch error:", err);
       }
@@ -817,18 +815,9 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
 
     return () => {
       destroyed = true;
-      if (canvas) {
-        const ec = canvas as unknown as EventfulCanvas;
-        if (ec._downHandler)
-          canvas.removeEventListener("pointerdown", ec._downHandler);
-        if (ec._moveHandler)
-          canvas.removeEventListener("pointermove", ec._moveHandler);
-        if (ec._dblClickHandler)
-          canvas.removeEventListener("dblclick", ec._dblClickHandler);
-        delete ec._downHandler;
-        delete ec._moveHandler;
-        delete ec._dblClickHandler;
-      }
+      canvas.removeEventListener("pointerdown", downHandler);
+      canvas.removeEventListener("pointermove", moveHandler);
+      canvas.removeEventListener("dblclick", dblClickHandler);
       try {
         chartInstanceRef.current?.destroy();
       } catch {

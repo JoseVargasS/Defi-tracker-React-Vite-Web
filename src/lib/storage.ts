@@ -81,13 +81,15 @@ export function writeSavedWallets(wallets: string[]): string[] {
 
 function sanitizePairs(pairs: string[]): string[] {
   if (!Array.isArray(pairs)) return [];
-  const clean = [
-    ...new Set(
-      pairs
-        .map((p) => (typeof p === 'string' ? p.toUpperCase() : ''))
-        .filter((p) => PAIR_SYMBOL_RE.test(p))
-    ),
-  ];
+  const seen = new Set<string>();
+  const clean: string[] = [];
+  for (const p of pairs) {
+    const upper = typeof p === 'string' ? p.toUpperCase() : '';
+    if (PAIR_SYMBOL_RE.test(upper) && !seen.has(upper)) {
+      seen.add(upper);
+      clean.push(upper);
+    }
+  }
   return clean.length ? clean : [...DEFAULT_TRACKED_PAIRS];
 }
 

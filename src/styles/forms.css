@@ -66,19 +66,28 @@ button,
   display: block;
 }
 
-#pair-suggestions div {
+#pair-suggestions div,
+#pair-suggestions button {
+  display: block;
+  width: 100%;
   padding: 10px 14px;
   cursor: pointer;
   color: var(--ink-2);
+  border: none;
   border-bottom: 1px solid var(--border-soft);
+  background: none;
+  font-family: inherit;
+  text-align: left;
   transition: background 0.12s, color 0.12s, padding-left 0.12s;
 }
 
-#pair-suggestions div:last-child {
+#pair-suggestions div:last-child,
+#pair-suggestions button:last-child {
   border-bottom: none;
 }
 
-#pair-suggestions div:hover {
+#pair-suggestions div:hover,
+#pair-suggestions button:hover {
   background: var(--positive-soft);
   color: var(--ink-1);
   padding-left: 18px;

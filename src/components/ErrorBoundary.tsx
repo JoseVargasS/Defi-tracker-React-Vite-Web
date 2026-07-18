@@ -19,7 +19,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <p className="error-boundary-msg">
             Ocurrio un error inesperado. Recarga la pagina para continuar.
           </p>
-          <button className="error-boundary-btn" onClick={() => window.location.reload()}>
+          <button type="button" className="error-boundary-btn" onClick={() => window.location.reload()}>
             Recargar
           </button>
         </div>

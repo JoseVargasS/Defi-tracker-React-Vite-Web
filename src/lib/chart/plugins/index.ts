@@ -56,17 +56,19 @@ const getSeparatedChipPositions = (
   const gap = 5;
   const minY = scale.top + 4;
   const maxY = scale.bottom - chipHeight;
-  const chips = values
-    .filter((v) => Number.isFinite(v.value))
-    .map((v) => ({
+  const chips: { key: string; value: number | null | undefined; color: string; y: number }[] = [];
+  for (const v of values) {
+    if (!Number.isFinite(v.value)) continue;
+    chips.push({
       ...v,
       y: clamp(
         (scale as ScaleLike).getPixelForValue(v.value as number)! - chipHeight / 2,
         minY,
         maxY,
       ),
-    }))
-    .sort((a, b) => a.y - b.y);
+    });
+  }
+  chips.sort((a, b) => a.y - b.y);
   for (let i = 1; i < chips.length; i++) {
     chips[i]!.y = Math.max(chips[i]!.y, chips[i - 1]!.y + chipHeight + gap);
   }

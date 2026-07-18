@@ -6,6 +6,11 @@ import { formatPrice, safeImageUrl } from '@/lib/utils';
 import { COIN_ICON_URLS, coinDisplayName } from '@/lib/assets';
 import { TRACKED_PAIRS_POLL_MS, splitPairSymbol } from '@/lib/config';
 
+const iconUrl = (base: string) => {
+  const url = COIN_ICON_URLS[base];
+  return url ? safeImageUrl(url) : '';
+};
+
 export function TrackedPairs() {
   const tracked = useMarketStore((s) => s.tracked);
   const removeTracked = useMarketStore((s) => s.removeTracked);
@@ -62,11 +67,6 @@ export function TrackedPairs() {
     [removeTracked],
   );
 
-  const iconUrl = (base: string) => {
-    const url = COIN_ICON_URLS[base];
-    return url ? safeImageUrl(url) : '';
-  };
-
   return (
     <div id="tracked-pairs">
       {tracked.map((symbol) => {
@@ -80,7 +80,14 @@ export function TrackedPairs() {
         const suffix = quote ? '/' + quote : '';
 
         return (
-          <div key={symbol} className="tracked-pair" onClick={handleClick(symbol)}>
+          <div
+            key={symbol}
+            className="tracked-pair"
+            role="button"
+            tabIndex={0}
+            onClick={handleClick(symbol)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(symbol)(); } }}
+          >
             <div className="coin-icon">
               {fallback ? (
                 <span className="coin-icon-text">{base[0]}</span>
@@ -103,7 +110,7 @@ export function TrackedPairs() {
                 {change}
               </span>
             </div>
-            <button className="delete-btn" onClick={handleRemove(symbol)} title="Eliminar par">
+            <button type="button" className="delete-btn" onClick={handleRemove(symbol)} title="Eliminar par">
               ×
             </button>
           </div>

@@ -98,12 +98,19 @@ async function fetchExplorerBalances(address: string, chain: { id: string; name:
     tokenBalances.set(key, current);
   }
 
+  const tokenList: { name: string; symbol: string; amount: number; imgUrl: string | null }[] = [];
   for (const token of tokenBalances.values()) {
     if (token.raw <= BigInt(0)) continue;
     const amount = integerAmountToNumber(token.raw.toString(), token.decimals);
     if (amount <= 0) continue;
-    const price = await getFallbackTokenPrice(token.symbol);
-    balances.push({ name: token.name, symbol: token.symbol, amount, price, imgUrl: token.imgUrl });
+    tokenList.push({ name: token.name, symbol: token.symbol, amount, imgUrl: token.imgUrl });
+  }
+
+  if (tokenList.length) {
+    const prices = await Promise.all(tokenList.map((t) => getFallbackTokenPrice(t.symbol)));
+    for (let i = 0; i < tokenList.length; i++) {
+      balances.push({ ...tokenList[i], price: prices[i] });
+    }
   }
 
   return { chain, balances, source: 'etherscan' as const };
@@ -148,18 +155,21 @@ async function fetchWalletAssets(address: string): Promise<{ assets: import('@/s
   for (const result of chainResults) {
     if (!result || !result.balances || result.balances.length === 0) continue;
 
-    const chainAssets = result.balances
-      .map(token => ({
+    const chainAssets: typeof allAssets = [];
+    for (const token of result.balances) {
+      const amount = token.amount || 0;
+      if (amount <= 0) continue;
+      chainAssets.push({
         symbol: token.symbol,
-        amount: token.amount || 0,
+        amount,
         price: Number.isFinite(Number(token.price)) ? Number(token.price) : null,
-        total: Number.isFinite(Number(token.price)) ? (token.amount || 0) * Number(token.price) : 0,
+        total: Number.isFinite(Number(token.price)) ? amount * Number(token.price) : 0,
         chain: result.chain.name,
         chainId: result.chain.id,
         chainIcon: result.chain.icon,
         imgUrl: token.imgUrl || '',
-      }))
-      .filter(asset => asset.amount > 0);
+      });
+    }
 
     if (chainAssets.length > 0) {
       byChain[result.chain.name] = chainAssets;
@@ -170,6 +180,8 @@ async function fetchWalletAssets(address: string): Promise<{ assets: import('@/s
   const totalWorth = allAssets.reduce((acc, a) => acc + (a.total || 0), 0);
   return { assets: allAssets, totalWorth };
 }
+
+const truncated = (w: string) => w.length > 14 ? `${w.slice(0, 6)}...${w.slice(-4)}` : w;
 
 export function WalletSection() {
   const {
@@ -257,7 +269,6 @@ export function WalletSection() {
   }, [setAddress]);
 
   const isSaved = savedWallets.includes(address);
-  const truncated = (w: string) => w.length > 14 ? `${w.slice(0, 6)}...${w.slice(-4)}` : w;
 
   return (
     <section className="wallet-section">
@@ -275,6 +286,7 @@ export function WalletSection() {
             className="wallet-input"
           />
           <button
+            type="button"
             className="btn-search"
             onClick={handleSearch}
             disabled={loading}
@@ -289,7 +301,7 @@ export function WalletSection() {
             {loading ? 'Buscando...' : 'Buscar'}
           </button>
           {address && !isSaved && (
-            <button className="btn-save" onClick={handleSave} disabled={loading} title="Guardar billetera">
+            <button type="button" className="btn-save" onClick={handleSave} disabled={loading} title="Guardar billetera">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
               </svg>
@@ -309,7 +321,7 @@ export function WalletSection() {
           <div className="wallet-saved-section">
             <div className="wallet-saved-header">
               <span className="wallet-saved-title">Billeteras guardadas</span>
-              <button className="btn-clear-all" onClick={handleClearAll} title="Eliminar todas">
+              <button type="button" className="btn-clear-all" onClick={handleClearAll} title="Eliminar todas">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
                 </svg>
@@ -329,6 +341,7 @@ export function WalletSection() {
                   <span className="wallet-chip-address">{truncated(w)}</span>
                   <div className="wallet-chip-actions">
                     <button
+                      type="button"
                       className="wallet-chip-btn"
                       onClick={(e) => { e.stopPropagation(); handleCopy(w); }}
                       title="Copiar direccion"
@@ -338,6 +351,7 @@ export function WalletSection() {
                       </svg>
                     </button>
                     <button
+                      type="button"
                       className="wallet-chip-btn wallet-chip-btn-danger"
                       onClick={(e) => { e.stopPropagation(); handleDelete(w); }}
                       title="Eliminar billetera"
