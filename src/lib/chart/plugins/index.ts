@@ -2,7 +2,7 @@ import type { Chart } from 'chart.js';
 import { CHART_THEME, DEFAULT_INDICATOR_COLORS, getIndicatorColor } from '@/lib/chart/indicators';
 import { compactNumber, type Candle } from '@/lib/chart/normalize';
 import { splitPairSymbol } from '@/lib/config';
-import type { EnhancedChart, ScaleLike, ChartDatasetLike, VPRow, CrosshairState } from '@/lib/chart/types';
+import type { EnhancedChart, ScaleLike, ChartDatasetLike, CrosshairState } from '@/lib/chart/types';
 
 type ChartPoint = { x: number; y?: number | null; q?: number };
 const asPoints = (data: unknown[]): ChartPoint[] =>
