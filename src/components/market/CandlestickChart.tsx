@@ -1,5 +1,6 @@
 // ponytail: Chart.js types are stricter than our local ChartDatasetLike; casts are intentional
 import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
+import type { ChartComponentLike } from 'chart.js';
 
 // ponytail: dynamic import avoids eager bundling of chart.js per react-doctor/prefer-dynamic-import
 let _ChartCtor: (new (ctx: CanvasRenderingContext2D, config: Record<string, unknown>) => EnhancedChart) | null = null;
@@ -27,7 +28,7 @@ const _chartReady = (async () => {
     chartjs.Filler,
     fin.CandlestickController,
     fin.CandlestickElement,
-    (zoom as { default?: unknown }).default ?? zoom,
+    ((zoom as { default?: unknown }).default ?? zoom) as unknown as ChartComponentLike,
   );
 })();
 import { fetchKlines, fetchLatestKlines } from "@/api/binance";
@@ -768,15 +769,15 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
                 pan: {
                   enabled: !mActive,
                   mode: "xy",
-                  onPanStart: ({ chart: c }) => {
+                  onPanStart: ({ chart: c }: { chart: EnhancedChart }) => {
                     panActiveRef.current = true;
-                    (c as EnhancedChart)._panActive = true;
+                    c._panActive = true;
                     return !measureActiveRef.current;
                   },
                   onPan: () => !measureActiveRef.current,
-                  onPanComplete: ({ chart: c }) => {
+                  onPanComplete: ({ chart: c }: { chart: EnhancedChart }) => {
                     panActiveRef.current = false;
-                    const ec = c as EnhancedChart;
+                    const ec = c;
                     ec._panActive = false;
                     ec._userMovedPan = true;
                     ec._visibleCount = visibleCandleCount(ec);
@@ -793,8 +794,8 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
                   pinch: { enabled: true },
                   drag: { enabled: false },
                   onZoomStart: () => !measureActiveRef.current,
-                  onZoomComplete: ({ chart: c }) => {
-                    const ec = c as EnhancedChart;
+                  onZoomComplete: ({ chart: c }: { chart: EnhancedChart }) => {
+                    const ec = c;
                     ec._userMovedPan = true;
                     ec._visibleCount = visibleCandleCount(ec);
                     void maybeLoadMore(ec);

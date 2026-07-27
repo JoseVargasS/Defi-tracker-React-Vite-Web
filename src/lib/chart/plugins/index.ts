@@ -2,7 +2,7 @@ import type { Chart } from 'chart.js';
 import { CHART_THEME, DEFAULT_INDICATOR_COLORS, getIndicatorColor } from '@/lib/chart/indicators';
 import { compactNumber, type Candle } from '@/lib/chart/normalize';
 import { splitPairSymbol } from '@/lib/config';
-import type { EnhancedChart, ScaleLike, ChartDatasetLike, CrosshairState } from '@/lib/chart/types';
+import type { EnhancedChart, ScaleLike, ChartDatasetLike, CrosshairState, VolumeProfileResult, VolumeProfileSettings } from '@/lib/chart/types';
 
 type ChartPoint = { x: number; y?: number | null; q?: number };
 const asPoints = (data: unknown[]): ChartPoint[] =>
@@ -531,14 +531,16 @@ function drawVolumeProfileBars(
     ctx.fillRect(x + downWidth, y, upWidth, height);
   }
 
-  const pocY = priceScale.getPixelForValue(profile.poc.price);
-  ctx.strokeStyle = 'rgba(242, 201, 76, 0.58)';
-  ctx.lineWidth = 1.2;
-  ctx.setLineDash([2, 2]);
-  ctx.beginPath();
-  ctx.moveTo(visibleStart, pocY);
-  ctx.lineTo(visibleEnd, pocY);
-  ctx.stroke();
+  if (profile.poc) {
+    const pocY = priceScale.getPixelForValue(profile.poc.price);
+    ctx.strokeStyle = 'rgba(242, 201, 76, 0.58)';
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([2, 2]);
+    ctx.beginPath();
+    ctx.moveTo(visibleStart, pocY);
+    ctx.lineTo(visibleEnd, pocY);
+    ctx.stroke();
+  }
   ctx.restore();
 }
 

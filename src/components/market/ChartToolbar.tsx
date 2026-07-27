@@ -5,7 +5,7 @@ import type { ChartHandle } from '@/components/market/CandlestickChart';
 import type { MaLineConfig } from '@/lib/chart/types';
 
 interface ChartToolbarProps {
-  chartRef: React.RefObject<ChartHandle>;
+  chartRef: React.RefObject<ChartHandle | null>;
   measureActive: boolean;
   onMeasureActiveChange: (active: boolean) => void;
   onResetChart: () => void;
