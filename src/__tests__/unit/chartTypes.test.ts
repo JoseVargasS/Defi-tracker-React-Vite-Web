@@ -1,9 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
-  SMA_PERIOD_OPTIONS,
-  EMA_PERIOD_OPTIONS,
   type IndicatorColorKey,
   type IndicatorColors,
+  type MaLineConfig,
   type ChartIndicatorsState,
   type MeasureState,
   type MeasurePoint,
@@ -16,43 +15,19 @@ import {
   type ChartDatasetLike,
 } from '@/lib/chart/types';
 
-describe('SMA_PERIOD_OPTIONS', () => {
-  it('contains expected periods', () => {
-    expect(SMA_PERIOD_OPTIONS).toEqual([40, 50, 75, 100, 150, 200]);
-  });
-
-  it('is a readonly array', () => {
-    expect(SMA_PERIOD_OPTIONS).toHaveLength(6);
-    expect(SMA_PERIOD_OPTIONS[0]).toBe(40);
-    expect(SMA_PERIOD_OPTIONS[5]).toBe(200);
-  });
-});
-
-describe('EMA_PERIOD_OPTIONS', () => {
-  it('contains expected periods', () => {
-    expect(EMA_PERIOD_OPTIONS).toEqual([40, 50, 75, 100, 150, 200]);
-  });
-
-  it('matches SMA periods', () => {
-    expect([...SMA_PERIOD_OPTIONS]).toEqual([...EMA_PERIOD_OPTIONS]);
-  });
-});
-
 describe('IndicatorColorKey type', () => {
   it('all color keys are valid strings', () => {
     const keys: IndicatorColorKey[] = [
-      'sma', 'ema', 'rsi', 'stochK', 'stochD',
+      'rsi', 'stochK', 'stochD',
       'bbLine', 'bbBasis', 'bbFill', 'stochLevelOver', 'stochLevelUnder',
     ];
-    expect(keys).toHaveLength(10);
+    expect(keys).toHaveLength(8);
   });
 });
 
 describe('IndicatorColors type', () => {
   it('constructs valid color record', () => {
     const colors: IndicatorColors = {
-      sma: '#ff0000',
-      ema: '#00ff00',
       rsi: '#0000ff',
       stochK: '#ff00ff',
       stochD: '#ffff00',
@@ -62,33 +37,32 @@ describe('IndicatorColors type', () => {
       stochLevelOver: '#aaa',
       stochLevelUnder: '#bbb',
     };
-    expect(colors.sma).toBe('#ff0000');
-    expect(Object.keys(colors)).toHaveLength(10);
+    expect(colors.rsi).toBe('#0000ff');
+    expect(Object.keys(colors)).toHaveLength(8);
   });
 });
 
 describe('ChartIndicatorsState type', () => {
   it('constructs valid state', () => {
+    const smaLine: MaLineConfig = { id: 'sma-50', period: 50, color: '#00BCD4', enabled: true };
+    const emaLine: MaLineConfig = { id: 'ema-200', period: 200, color: '#4CAF50', enabled: false };
     const state: ChartIndicatorsState = {
       bollinger: true,
       volume: false,
       stochRsi: true,
       volumeProfile: false,
-      smaEnabled: true,
-      smaPeriod: 50,
-      emaEnabled: false,
-      emaPeriod: 200,
+      smaLines: [smaLine],
+      emaLines: [emaLine],
       rsiEnabled: true,
       rsiPeriod: 14,
       colors: {
-        sma: '#ff0000', ema: '#00ff00', rsi: '#0000ff',
-        stochK: '#ff00ff', stochD: '#ffff00', bbLine: '#00ffff',
+        rsi: '#0000ff', stochK: '#ff00ff', stochD: '#ffff00', bbLine: '#00ffff',
         bbBasis: '#ffffff', bbFill: '#888888',
         stochLevelOver: '#aaa', stochLevelUnder: '#bbb',
       },
     };
     expect(state.bollinger).toBe(true);
-    expect(state.smaPeriod).toBe(50);
+    expect(state.smaLines[0].period).toBe(50);
     expect(state.rsiPeriod).toBe(14);
   });
 });

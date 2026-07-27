@@ -14,10 +14,8 @@ beforeEach(() => {
       volume: true,
       stochRsi: true,
       volumeProfile: true,
-      smaEnabled: false,
-      smaPeriod: 200,
-      emaEnabled: false,
-      emaPeriod: 200,
+      smaLines: [{ id: 'sma-50', period: 50, color: '#00BCD4', enabled: true }],
+      emaLines: [{ id: 'ema-200', period: 200, color: '#4CAF50', enabled: false }],
       rsiEnabled: false,
       rsiPeriod: 14,
       colors: expect.any(Object),
@@ -93,14 +91,18 @@ describe('useMarketStore', () => {
     expect(useMarketStore.getState().chartIndicators.bollinger).toBe(false);
   });
 
-  it('setSmaPeriod updates period', () => {
-    useMarketStore.getState().setSmaPeriod(50);
-    expect(useMarketStore.getState().chartIndicators.smaPeriod).toBe(50);
+  it('setSmaLine updates a specific SMA line', () => {
+    useMarketStore.getState().setSmaLine('sma-50', { period: 100 });
+    const lines = useMarketStore.getState().chartIndicators.smaLines;
+    const line = lines.find(l => l.id === 'sma-50');
+    expect(line?.period).toBe(100);
   });
 
-  it('setEmaPeriod updates period', () => {
-    useMarketStore.getState().setEmaPeriod(100);
-    expect(useMarketStore.getState().chartIndicators.emaPeriod).toBe(100);
+  it('setEmaLine updates a specific EMA line', () => {
+    useMarketStore.getState().setEmaLine('ema-200', { period: 100 });
+    const lines = useMarketStore.getState().chartIndicators.emaLines;
+    const line = lines.find(l => l.id === 'ema-200');
+    expect(line?.period).toBe(100);
   });
 
   it('setRsiEnabled toggles RSI', () => {
@@ -114,8 +116,8 @@ describe('useMarketStore', () => {
   });
 
   it('setIndicatorColor updates color', () => {
-    useMarketStore.getState().setIndicatorColor('sma', '#ff0000');
-    expect(useMarketStore.getState().chartIndicators.colors.sma).toBe('#ff0000');
+    useMarketStore.getState().setIndicatorColor('rsi', '#ff0000');
+    expect(useMarketStore.getState().chartIndicators.colors.rsi).toBe('#ff0000');
   });
 
   it('setCoinsList sets list', () => {

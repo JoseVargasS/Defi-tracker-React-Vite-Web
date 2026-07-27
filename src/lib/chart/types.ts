@@ -1,8 +1,6 @@
 import type { Chart } from 'chart.js';
 
 export type IndicatorColorKey =
-  | 'sma'
-  | 'ema'
   | 'rsi'
   | 'stochK'
   | 'stochD'
@@ -14,18 +12,20 @@ export type IndicatorColorKey =
 
 export type IndicatorColors = Record<IndicatorColorKey, string>;
 
-export const SMA_PERIOD_OPTIONS = [40, 50, 75, 100, 150, 200] as const;
-export const EMA_PERIOD_OPTIONS = [40, 50, 75, 100, 150, 200] as const;
+export interface MaLineConfig {
+  id: string;
+  period: number;
+  color: string;
+  enabled: boolean;
+}
 
 export interface ChartIndicatorsState {
   bollinger: boolean;
   volume: boolean;
   stochRsi: boolean;
   volumeProfile: boolean;
-  smaEnabled: boolean;
-  smaPeriod: number;
-  emaEnabled: boolean;
-  emaPeriod: number;
+  smaLines: MaLineConfig[];
+  emaLines: MaLineConfig[];
   rsiEnabled: boolean;
   rsiPeriod: number;
   colors: IndicatorColors;
@@ -72,6 +72,8 @@ export interface EnhancedChart extends Chart<'candlestick'> {
   _pairPrice: number | null;
   _userMovedPan: boolean;
   _visibleCount: number;
+  _panActive: boolean;
+  _vpCacheFingerprint: string;
   crosshair: CrosshairState;
 }
 

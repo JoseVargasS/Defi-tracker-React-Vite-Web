@@ -12,6 +12,10 @@ vi.mock('@/lib/storage', () => ({
   migrateAppStorage: vi.fn(),
   readTrackedPairs: vi.fn().mockReturnValue([]),
   writeTrackedPairs: vi.fn(),
+  readSmaLines: vi.fn().mockReturnValue([]),
+  writeSmaLines: vi.fn(),
+  readEmaLines: vi.fn().mockReturnValue([]),
+  writeEmaLines: vi.fn(),
   readIndicatorColors: vi.fn().mockReturnValue({
     sma: '#ff0000', ema: '#00ff00', rsi: '#0000ff',
     stochK: '#ff00ff', stochD: '#ffff00', bbLine: '#00ffff',
@@ -83,15 +87,12 @@ describe('App', () => {
         volume: false,
         stochRsi: false,
         volumeProfile: false,
-        smaEnabled: false,
-        smaPeriod: 50,
-        emaEnabled: false,
-        emaPeriod: 50,
+        smaLines: [{ id: 'sma-50', period: 50, color: '#00BCD4', enabled: false }],
+        emaLines: [{ id: 'ema-50', period: 50, color: '#4CAF50', enabled: false }],
         rsiEnabled: false,
         rsiPeriod: 14,
         colors: {
-          sma: '#ff0000', ema: '#00ff00', rsi: '#0000ff',
-          stochK: '#ff00ff', stochD: '#ffff00', bbLine: '#00ffff',
+          rsi: '#0000ff', stochK: '#ff00ff', stochD: '#ffff00', bbLine: '#00ffff',
           bbBasis: '#ffffff', bbFill: '#888888',
           stochLevelOver: '#aaa', stochLevelUnder: '#bbb',
         },
@@ -214,11 +215,11 @@ describe('App', () => {
     expect(useMarketStore.getState().chartIndicators.volume).toBe(true);
   });
 
-  it('shows SMA and EMA selects', () => {
+  it('shows SMA and EMA buttons', () => {
     useMarketStore.setState({ currentPair: 'BTCUSDT' });
     render(<App />);
-    expect(screen.getByLabelText('SMA periodo')).toBeTruthy();
-    expect(screen.getByLabelText('EMA periodo')).toBeTruthy();
+    expect(screen.getByText('SMA')).toBeTruthy();
+    expect(screen.getByText('EMA')).toBeTruthy();
   });
 
   it('shows measure tool button', () => {

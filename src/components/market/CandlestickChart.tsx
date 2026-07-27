@@ -80,8 +80,8 @@ interface TechnicalSeries {
   volume: { x: number; y: number; q: number; color: string }[];
   stochRsi: { k: XY[]; d: XY[] };
   rsi: XY[];
-  sma: Record<number, XY[]>;
-  ema: Record<number, XY[]>;
+  sma: Record<string, XY[]>;
+  ema: Record<string, XY[]>;
 }
 
 const smaCache = new Map<string, XY[]>();
@@ -124,21 +124,33 @@ const timeUnitByInterval = (interval: string) => {
   return "minute";
 };
 
-const buildTechnicalSeries = (data: Candle[]): TechnicalSeries => {
+const buildTechnicalSeries = (data: Candle[], indicators?: ChartIndicatorsState): TechnicalSeries => {
   smaCache.clear();
   emaCache.clear();
+  const sma: Record<string, XY[]> = {};
+  const ema: Record<string, XY[]> = {};
+  if (indicators) {
+    for (const line of indicators.smaLines) {
+      if (line.enabled) sma[line.id] = getSmaSeries(data, line.period);
+    }
+    for (const line of indicators.emaLines) {
+      if (line.enabled) ema[line.id] = getEmaSeries(data, line.period);
+    }
+  }
   return {
     bands: calculateBollingerBands(data),
     volume: calculateVolume(data),
     stochRsi: calculateStochRSI(data),
     rsi: [],
-    sma: {},
-    ema: {},
+    sma,
+    ema,
   };
 };
 
-const horizontalLevel = (candles: Candle[], value: number): XY[] =>
-  candles.map((item) => ({ x: item.x, y: value }));
+const horizontalLevel = (candles: Candle[], value: number): XY[] => {
+  if (!candles.length) return [];
+  return [{ x: candles[0].x, y: value }, { x: candles[candles.length - 1].x, y: value }];
+};
 
 function buildDatasets(
   symbol: string,
@@ -309,13 +321,15 @@ function buildDatasets(
     );
   }
 
-  if (indicators.smaEnabled) {
+  for (const line of indicators.smaLines) {
+    if (!line.enabled) continue;
+    const d = series.sma[line.id] ?? getSmaSeries(candles, line.period);
     datasets.push({
-      label: `SMA ${indicators.smaPeriod}`,
+      label: `SMA ${line.period}`,
       type: "line",
-      data: getSmaSeries(candles, indicators.smaPeriod),
+      data: d,
       yAxisID: "price",
-      borderColor: getIndicatorColor(indicators, "sma"),
+      borderColor: line.color,
       borderWidth: 1.6,
       pointRadius: 0,
       fill: false,
@@ -323,13 +337,15 @@ function buildDatasets(
     });
   }
 
-  if (indicators.emaEnabled) {
+  for (const line of indicators.emaLines) {
+    if (!line.enabled) continue;
+    const d = series.ema[line.id] ?? getEmaSeries(candles, line.period);
     datasets.push({
-      label: `EMA ${indicators.emaPeriod}`,
+      label: `EMA ${line.period}`,
       type: "line",
-      data: getEmaSeries(candles, indicators.emaPeriod),
+      data: d,
       yAxisID: "price",
-      borderColor: getIndicatorColor(indicators, "ema"),
+      borderColor: line.color,
       borderWidth: 1.6,
       pointRadius: 0,
       fill: false,
@@ -341,7 +357,7 @@ function buildDatasets(
 }
 
 function createScales(interval: string, indicators: ChartIndicatorsState) {
-  return {
+  const scales: Record<string, unknown> = {
     x: {
       type: "time" as const,
       time: {
@@ -412,51 +428,59 @@ function createScales(interval: string, indicators: ChartIndicatorsState) {
       },
       border: { color: CHART_THEME.border, display: false },
     },
-    stochRsi: {
-      type: "linear" as const,
-      axis: "y" as const,
-      display: indicators.stochRsi,
-      position: "right" as const,
-      stack: PANEL_STACK,
-      stackWeight: indicators.stochRsi ? 1.55 : 0,
-      min: 0,
-      max: 100,
-      grid: { color: CHART_THEME.stochGrid, drawTicks: false },
-      ticks: {
-        color: CHART_THEME.muted,
-        font: {
-          size: 9,
-          family:
-            "-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif",
-        },
-        padding: 4,
-        stepSize: 50,
-      },
-      border: { color: CHART_THEME.border, display: false },
-    },
-    rsi: {
-      type: "linear" as const,
-      axis: "y" as const,
-      display: indicators.rsiEnabled,
-      position: "right" as const,
-      stack: PANEL_STACK,
-      stackWeight: indicators.rsiEnabled ? 1.45 : 0,
-      min: 0,
-      max: 100,
-      grid: { color: CHART_THEME.stochGrid, drawTicks: false },
-      ticks: {
-        color: CHART_THEME.muted,
-        font: {
-          size: 9,
-          family:
-            "-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif",
-        },
-        padding: 4,
-        stepSize: 50,
-      },
-      border: { color: CHART_THEME.border, display: false },
-    },
   };
+
+  if (indicators.stochRsi) {
+    scales.stochRsi = {
+      type: "linear" as const,
+      axis: "y" as const,
+      display: true,
+      position: "right" as const,
+      stack: PANEL_STACK,
+      stackWeight: 1.55,
+      min: 0,
+      max: 100,
+      grid: { color: CHART_THEME.stochGrid, drawTicks: false },
+      ticks: {
+        color: CHART_THEME.muted,
+        font: {
+          size: 9,
+          family:
+            "-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif",
+        },
+        padding: 4,
+        stepSize: 50,
+      },
+      border: { color: CHART_THEME.border, display: false },
+    };
+  }
+
+  if (indicators.rsiEnabled) {
+    scales.rsi = {
+      type: "linear" as const,
+      axis: "y" as const,
+      display: true,
+      position: "right" as const,
+      stack: PANEL_STACK,
+      stackWeight: 1.45,
+      min: 0,
+      max: 100,
+      grid: { color: CHART_THEME.stochGrid, drawTicks: false },
+      ticks: {
+        color: CHART_THEME.muted,
+        font: {
+          size: 9,
+          family:
+            "-apple-system, BlinkMacSystemFont, Trebuchet MS, Roboto, Ubuntu, sans-serif",
+        },
+        padding: 4,
+        stepSize: 50,
+      },
+      border: { color: CHART_THEME.border, display: false },
+    };
+  }
+
+  return scales;
 }
 
 const patchDatasetColors = (
@@ -482,8 +506,6 @@ const patchDatasetColors = (
     ) colorKey = "stochLevelUnder";
     else if (label.startsWith("RSI ") && !label.includes(" 70") && !label.includes(" 30"))
       colorKey = "rsi";
-    else if (label.startsWith("SMA ")) colorKey = "sma";
-    else if (label.startsWith("EMA ")) colorKey = "ema";
     if (colorKey) {
       d.borderColor = getIndicatorColor(indicators, colorKey);
     }
@@ -500,11 +522,12 @@ const visibleCandleCount = (chart: EnhancedChart): number => {
   const mn = xScale.min;
   const mx = xScale.max;
   if (mn == null || mx == null) return 0;
-  let count = 0;
-  for (let i = 0; i < data.length; i++) {
-    if (data[i].x >= mn && data[i].x <= mx) count++;
-  }
-  return count;
+  let lo = 0, hi = data.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if ((data[mid] as unknown as { x: number }).x >= mn) hi = mid; else lo = mid + 1; }
+  const start = lo;
+  lo = 0; hi = data.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if ((data[mid] as unknown as { x: number }).x <= mx) lo = mid + 1; else hi = mid; }
+  return lo - start;
 };
 
 const getNearestCandlePoint = (
@@ -560,6 +583,7 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
   const indicatorsRef = useRef(indicators);
   const measureActiveRef = useRef(measureActive);
   const loadingMoreRef = useRef(false);
+  const panActiveRef = useRef(false);
 
   useEffect(() => {
     indicatorsRef.current = indicators;
@@ -715,8 +739,8 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
         if (destroyed) return;
         if (!raw.length) return;
 
-        const fullSeries = buildTechnicalSeries(raw);
         const inds = indicatorsRef.current;
+        const fullSeries = buildTechnicalSeries(raw, inds);
         const mActive = measureActiveRef.current;
 
         rawDataRef.current = raw;
@@ -743,12 +767,17 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
               zoom: {
                 pan: {
                   enabled: !mActive,
-                  mode: "x",
-                  scaleMode: "y",
-                  onPanStart: () => !measureActiveRef.current,
+                  mode: "xy",
+                  onPanStart: ({ chart: c }) => {
+                    panActiveRef.current = true;
+                    (c as EnhancedChart)._panActive = true;
+                    return !measureActiveRef.current;
+                  },
                   onPan: () => !measureActiveRef.current,
                   onPanComplete: ({ chart: c }) => {
+                    panActiveRef.current = false;
                     const ec = c as EnhancedChart;
+                    ec._panActive = false;
                     ec._userMovedPan = true;
                     ec._visibleCount = visibleCandleCount(ec);
                     void maybeLoadMore(ec);
@@ -800,6 +829,8 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
           _volumeProfileSettings: {},
           _userMovedPan: false,
           _visibleCount: 0,
+          _panActive: false,
+          _vpCacheFingerprint: '',
         });
 
         if (destroyed) {
@@ -846,7 +877,8 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
           .slice(-fetchCount);
         if (cancelled || !raw.length) return;
 
-        const fullSeries = buildTechnicalSeries(raw);
+        const inds = indicatorsRef.current;
+        const fullSeries = buildTechnicalSeries(raw, inds);
 
         rawDataRef.current = raw;
         fullSeriesRef.current = fullSeries;
@@ -903,12 +935,10 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
         prev.volume === indicators.volume &&
         prev.stochRsi === indicators.stochRsi &&
         prev.volumeProfile === indicators.volumeProfile &&
-        prev.smaEnabled === indicators.smaEnabled &&
-        prev.smaPeriod === indicators.smaPeriod &&
-        prev.emaEnabled === indicators.emaEnabled &&
-        prev.emaPeriod === indicators.emaPeriod &&
         prev.rsiEnabled === indicators.rsiEnabled &&
-        prev.rsiPeriod === indicators.rsiPeriod;
+        prev.rsiPeriod === indicators.rsiPeriod &&
+        JSON.stringify(prev.smaLines) === JSON.stringify(indicators.smaLines) &&
+        JSON.stringify(prev.emaLines) === JSON.stringify(indicators.emaLines);
       if (sameStruct) {
         chart._indicators = { ...indicators };
         if (prev.colors !== indicators.colors) {
@@ -983,6 +1013,7 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
     if (intervalAggregate(interval)) return;
 
     const id = setInterval(async () => {
+      if (panActiveRef.current) return;
       const chart = chartInstanceRef.current;
       const rawData = rawDataRef.current;
       if (!chart || !rawData.length) return;
@@ -1012,7 +1043,7 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
           return;
         }
 
-        const series = buildTechnicalSeries(rawData);
+        const series = buildTechnicalSeries(rawData, indicatorsRef.current);
         fullSeriesRef.current = series;
         chart.data.datasets = buildDatasets(
           symbol,
@@ -1034,8 +1065,6 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
       const chart = chartInstanceRef.current;
       if (!chart) return;
       const colorMap: Record<string, string[]> = {
-        sma: ["SMA "],
-        ema: ["EMA "],
         rsi: ["RSI "],
         stochK: ["Stoch RSI %K"],
         stochD: ["Stoch RSI %D"],

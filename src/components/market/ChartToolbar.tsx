@@ -1,8 +1,8 @@
-import { type ChangeEvent, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMarketStore } from '@/store/useMarketStore';
-import { SMA_PERIOD_OPTIONS } from '@/lib/chart/types';
 import { CHART_INTERVALS, BINANCE_NATIVE_INTERVALS } from '@/lib/config';
 import type { ChartHandle } from '@/components/market/CandlestickChart';
+import type { MaLineConfig } from '@/lib/chart/types';
 
 interface ChartToolbarProps {
   chartRef: React.RefObject<ChartHandle>;
@@ -11,14 +11,88 @@ interface ChartToolbarProps {
   onResetChart: () => void;
 }
 
-const ALLOWED_PERIODS = SMA_PERIOD_OPTIONS as readonly number[];
-
 // ponytail: 12 buttons for the most-used intervals, all others in a select
 const BUTTON_INTERVAL_KEYS = ['1m', '5m', '15m', '1h', '4h', '12h', '1d', '3d', '5d', '1w', '1M', '3M'];
 const BUTTON_INTERVALS = CHART_INTERVALS.filter((iv) => BUTTON_INTERVAL_KEYS.includes(iv.key));
 const SELECT_INTERVALS = BINANCE_NATIVE_INTERVALS.filter(
   (iv) => !BUTTON_INTERVAL_KEYS.includes(iv),
 );
+
+interface MaModalProps {
+  title: string;
+  lines: MaLineConfig[];
+  onUpdate: (id: string, updates: Partial<Omit<MaLineConfig, 'id'>>) => void;
+  onAdd: () => void;
+  onRemove: (id: string) => void;
+  onClose: () => void;
+}
+
+function MaModal({ title, lines, onUpdate, onAdd, onRemove, onClose }: MaModalProps) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  return (
+    <div className="ma-modal-overlay">
+      <div className="ma-modal" ref={ref}>
+        <div className="ma-modal-header">
+          <span>{title}</span>
+          <button type="button" className="ma-modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="ma-modal-body">
+          {lines.map((line) => (
+            <div className="ma-modal-row" key={line.id}>
+              <label className="ma-modal-check">
+                <input
+                  type="checkbox"
+                  checked={line.enabled}
+                  onChange={() => onUpdate(line.id, { enabled: !line.enabled })}
+                />
+              </label>
+              <span className="ma-modal-label">Period</span>
+              <input
+                type="number"
+                className="ma-modal-input"
+                min={1}
+                max={999}
+                value={line.period}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10);
+                  if (v > 0) onUpdate(line.id, { period: v });
+                }}
+              />
+              <input
+                type="color"
+                className="ma-modal-color"
+                value={line.color}
+                onChange={(e) => onUpdate(line.id, { color: e.target.value })}
+              />
+              <button
+                type="button"
+                className="ma-modal-remove"
+                onClick={() => onRemove(line.id)}
+                title="Remove"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="ma-modal-footer">
+          <button type="button" className="ma-modal-add" onClick={onAdd}>+ Add {title}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function ChartToolbar({ chartRef, measureActive, onMeasureActiveChange, onResetChart }: ChartToolbarProps) {
   const chartMode = useMarketStore((s) => s.chartMode);
@@ -27,13 +101,19 @@ export function ChartToolbar({ chartRef, measureActive, onMeasureActiveChange, o
   const setCurrentInterval = useMarketStore((s) => s.setCurrentInterval);
   const chartIndicators = useMarketStore((s) => s.chartIndicators);
   const setChartIndicator = useMarketStore((s) => s.setChartIndicator);
-  const setSmaPeriod = useMarketStore((s) => s.setSmaPeriod);
-  const setEmaPeriod = useMarketStore((s) => s.setEmaPeriod);
+  const setSmaLine = useMarketStore((s) => s.setSmaLine);
+  const addSmaLine = useMarketStore((s) => s.addSmaLine);
+  const removeSmaLine = useMarketStore((s) => s.removeSmaLine);
+  const setEmaLine = useMarketStore((s) => s.setEmaLine);
+  const addEmaLine = useMarketStore((s) => s.addEmaLine);
+  const removeEmaLine = useMarketStore((s) => s.removeEmaLine);
   const setRsiEnabled = useMarketStore((s) => s.setRsiEnabled);
   const setRsiPeriod = useMarketStore((s) => s.setRsiPeriod);
   const setIndicatorColor = useMarketStore((s) => s.setIndicatorColor);
 
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const [smaModalOpen, setSmaModalOpen] = useState(false);
+  const [emaModalOpen, setEmaModalOpen] = useState(false);
   const colorBtnRef = useRef<HTMLButtonElement>(null);
   const colorPopupRef = useRef<HTMLDivElement>(null);
 
@@ -53,17 +133,8 @@ export function ChartToolbar({ chartRef, measureActive, onMeasureActiveChange, o
     return () => document.removeEventListener("mousedown", handler);
   }, [colorPickerOpen]);
 
-  const handleSmaPeriod = (e: ChangeEvent<HTMLSelectElement>) => {
-    const v = Number(e.target.value);
-    if (ALLOWED_PERIODS.includes(v)) setSmaPeriod(v);
-  };
-  const handleEmaPeriod = (e: ChangeEvent<HTMLSelectElement>) => {
-    const v = Number(e.target.value);
-    if (ALLOWED_PERIODS.includes(v)) setEmaPeriod(v);
-  };
-
-  const smaSelectValue = chartIndicators.smaEnabled ? String(chartIndicators.smaPeriod) : '';
-  const emaSelectValue = chartIndicators.emaEnabled ? String(chartIndicators.emaPeriod) : '';
+  const smaEnabled = chartIndicators.smaLines.some((l) => l.enabled);
+  const emaEnabled = chartIndicators.emaLines.some((l) => l.enabled);
 
   return (
     <div className="chart-controls-bar" role="toolbar" aria-label="Controles del chart">
@@ -153,38 +224,20 @@ export function ChartToolbar({ chartRef, measureActive, onMeasureActiveChange, o
             ))}
           </select>
         )}
-        <select
-          className={`indicator-select${chartIndicators.smaEnabled ? ' active' : ''}`}
-          value={smaSelectValue}
-          onChange={(e) => {
-            const v = e.target.value;
-            if (v === '') { setChartIndicator('smaEnabled', false); return; }
-            handleSmaPeriod(e);
-            setChartIndicator('smaEnabled', true);
-          }}
-          aria-label="SMA periodo"
+        <button
+          type="button"
+          className={`chart-indicator-toggle${smaEnabled ? ' active' : ''}`}
+          onClick={() => setSmaModalOpen((v) => !v)}
         >
-          <option value="">SMA</option>
-          {ALLOWED_PERIODS.map((p) => (
-            <option key={p} value={p}>SMA {p}</option>
-          ))}
-        </select>
-        <select
-          className={`indicator-select${chartIndicators.emaEnabled ? ' active' : ''}`}
-          value={emaSelectValue}
-          onChange={(e) => {
-            const v = e.target.value;
-            if (v === '') { setChartIndicator('emaEnabled', false); return; }
-            handleEmaPeriod(e);
-            setChartIndicator('emaEnabled', true);
-          }}
-          aria-label="EMA periodo"
+          SMA
+        </button>
+        <button
+          type="button"
+          className={`chart-indicator-toggle${emaEnabled ? ' active' : ''}`}
+          onClick={() => setEmaModalOpen((v) => !v)}
         >
-          <option value="">EMA</option>
-          {ALLOWED_PERIODS.map((p) => (
-            <option key={p} value={p}>EMA {p}</option>
-          ))}
-        </select>
+          EMA
+        </button>
         <span className="chart-controls-sep" aria-hidden />
         <button
           type="button"
@@ -226,18 +279,6 @@ export function ChartToolbar({ chartRef, measureActive, onMeasureActiveChange, o
                     <input type="color" value={chartIndicators.colors.rsi} onInput={(e) => chartRef.current?.patchColor('rsi', (e.target as HTMLInputElement).value)} onChange={(e) => setIndicatorColor('rsi', (e.target as HTMLInputElement).value)} />
                 </label>
               )}
-              {chartIndicators.smaEnabled && (
-                <label className="color-picker-row">
-                  <span className="color-label">SMA</span>
-                    <input type="color" value={chartIndicators.colors.sma} onInput={(e) => chartRef.current?.patchColor('sma', (e.target as HTMLInputElement).value)} onChange={(e) => setIndicatorColor('sma', (e.target as HTMLInputElement).value)} />
-                </label>
-              )}
-              {chartIndicators.emaEnabled && (
-                <label className="color-picker-row">
-                  <span className="color-label">EMA</span>
-                    <input type="color" value={chartIndicators.colors.ema} onInput={(e) => chartRef.current?.patchColor('ema', (e.target as HTMLInputElement).value)} onChange={(e) => setIndicatorColor('ema', (e.target as HTMLInputElement).value)} />
-                </label>
-              )}
               {chartIndicators.bollinger && (
                 <>
                   <label className="color-picker-row">
@@ -254,6 +295,27 @@ export function ChartToolbar({ chartRef, measureActive, onMeasureActiveChange, o
           )}
         </div>
       </div>
+
+      {smaModalOpen && (
+        <MaModal
+          title="SMA"
+          lines={chartIndicators.smaLines}
+          onUpdate={setSmaLine}
+          onAdd={addSmaLine}
+          onRemove={removeSmaLine}
+          onClose={() => setSmaModalOpen(false)}
+        />
+      )}
+      {emaModalOpen && (
+        <MaModal
+          title="EMA"
+          lines={chartIndicators.emaLines}
+          onUpdate={setEmaLine}
+          onAdd={addEmaLine}
+          onRemove={removeEmaLine}
+          onClose={() => setEmaModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

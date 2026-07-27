@@ -9,7 +9,7 @@ import { ChartToolbar } from '@/components/market/ChartToolbar';
 import TradingViewWidget from '@/components/market/TradingViewWidget';
 import { WalletSection } from '@/components/wallet/WalletSection';
 import TransactionSection from '@/components/transactions/TransactionSection';
-import { migrateAppStorage, readTrackedPairs, writeTrackedPairs, readIndicatorColors, writeIndicatorColors } from '@/lib/storage';
+import { migrateAppStorage, readTrackedPairs, writeTrackedPairs, readIndicatorColors, writeIndicatorColors, readSmaLines, writeSmaLines, readEmaLines, writeEmaLines } from '@/lib/storage';
 import { useMarketStore } from '@/store/useMarketStore';
 import { fetch24hStats } from '@/api/binance';
 import { formatPrice } from '@/lib/utils';
@@ -80,8 +80,15 @@ export default function App() {
     setTracked(readTrackedPairs());
 
     const savedColors = readIndicatorColors();
+    const savedSmaLines = readSmaLines();
+    const savedEmaLines = readEmaLines();
     useMarketStore.setState((state) => ({
-      chartIndicators: { ...state.chartIndicators, colors: savedColors },
+      chartIndicators: {
+        ...state.chartIndicators,
+        colors: savedColors,
+        smaLines: savedSmaLines,
+        emaLines: savedEmaLines,
+      },
     }));
 
     (async () => {
@@ -103,14 +110,21 @@ export default function App() {
     const unsubTracked = useMarketStore.subscribe((state) => {
       writeTrackedPairs(state.tracked);
     });
-    let colorSaveTimer: ReturnType<typeof setTimeout> | null = null;
-    const unsubColors = useMarketStore.subscribe((state, prevState) => {
-      if (state.chartIndicators.colors !== prevState.chartIndicators.colors) {
-        if (colorSaveTimer !== null) clearTimeout(colorSaveTimer);
-        colorSaveTimer = setTimeout(
-          () => writeIndicatorColors(state.chartIndicators.colors),
-          300,
-        );
+    let saveTimer: ReturnType<typeof setTimeout> | null = null;
+    const unsubIndicators = useMarketStore.subscribe((state, prevState) => {
+      const c = state.chartIndicators;
+      const p = prevState.chartIndicators;
+      if (c.colors !== p.colors) {
+        if (saveTimer !== null) clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => writeIndicatorColors(c.colors), 300);
+      }
+      if (c.smaLines !== p.smaLines) {
+        if (saveTimer !== null) clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => writeSmaLines(c.smaLines), 300);
+      }
+      if (c.emaLines !== p.emaLines) {
+        if (saveTimer !== null) clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => writeEmaLines(c.emaLines), 300);
       }
     });
 
@@ -127,8 +141,8 @@ export default function App() {
 
     return () => {
       unsubTracked();
-      unsubColors();
-      if (colorSaveTimer !== null) clearTimeout(colorSaveTimer);
+      unsubIndicators();
+      if (saveTimer !== null) clearTimeout(saveTimer);
       window.removeEventListener('unhandledrejection', handler);
     };
     // ponytail: mount once
@@ -203,7 +217,7 @@ export default function App() {
                       />
                     </Suspense>
                   ) : (
-                    <TradingViewWidget key={`${currentPair}-${currentInterval}`} symbol={currentPair} interval={currentInterval} />
+                    <TradingViewWidget />
                   )}
                 </div>
               </>

@@ -6,12 +6,16 @@ import {
   writeTrackedPairs,
   readIndicatorColors,
   writeIndicatorColors,
+  readSmaLines,
+  writeSmaLines,
+  readEmaLines,
+  writeEmaLines,
   migrateAppStorage,
   clearAppStorage,
   STORAGE_KEYS,
 } from '@/lib/storage';
 import { APP_STORAGE_VERSION } from '@/lib/config';
-import type { IndicatorColors } from '@/lib/chart/types';
+import type { IndicatorColors, MaLineConfig } from '@/lib/chart/types';
 
 const VALID_ADDRESS = '0x1234567890abcdef1234567890abcdef12345678';
 const VALID_ADDRESS_2 = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -127,15 +131,12 @@ describe('indicator colors persistence', () => {
 
   it('readIndicatorColors returns defaults when nothing stored', () => {
     const colors = readIndicatorColors();
-    expect(colors.sma).toBeTruthy();
     expect(colors.rsi).toBeTruthy();
     expect(colors.stochK).toBeTruthy();
   });
 
   it('writeIndicatorColors round-trips valid hex colors', () => {
     const testColors = {
-      sma: '#ff0000',
-      ema: '#00ff00',
       rsi: '#0000ff',
       stochK: '#ffff00',
       stochD: '#ff00ff',
@@ -147,15 +148,12 @@ describe('indicator colors persistence', () => {
     };
     writeIndicatorColors(testColors);
     const read = readIndicatorColors();
-    expect(read.sma).toBe('#ff0000');
-    expect(read.ema).toBe('#00ff00');
     expect(read.rsi).toBe('#0000ff');
+    expect(read.stochK).toBe('#ffff00');
   });
 
   it('writeIndicatorColors rejects invalid hex values', () => {
     writeIndicatorColors({
-      sma: '#zzzzzz',
-      ema: '#00ff00',
       rsi: 'invalid',
       stochK: '#ffff00',
       stochD: '#ff00ff',
@@ -165,15 +163,14 @@ describe('indicator colors persistence', () => {
       stochLevelOver: '#ff0000',
       stochLevelUnder: '#00ff00',
     } as IndicatorColors);
-    // invalid ones fall back to defaults
     const read = readIndicatorColors();
-    expect(read.sma).not.toBe('#zzzzzz');
-    expect(read.ema).toBe('#00ff00');
+    expect(read.rsi).toBeTruthy(); // falls back to default
+    expect(read.stochK).toBe('#ffff00');
   });
 
   it('readIndicatorColors returns all keys from DEFAULT_INDICATOR_COLORS', () => {
     const colors = readIndicatorColors();
-    const keys: (keyof typeof colors)[] = ['sma', 'ema', 'rsi', 'stochK', 'stochD', 'bbLine', 'bbBasis', 'bbFill', 'stochLevelOver', 'stochLevelUnder'];
+    const keys: (keyof typeof colors)[] = ['rsi', 'stochK', 'stochD', 'bbLine', 'bbBasis', 'bbFill', 'stochLevelOver', 'stochLevelUnder'];
     for (const key of keys) {
       expect(colors[key]).toBeTruthy();
     }
@@ -211,6 +208,45 @@ describe('migrateAppStorage', () => {
   });
 });
 
+describe('SMA/EMA lines persistence', () => {
+  beforeEach(() => { localStorage.clear(); });
+
+  it('readSmaLines returns defaults when nothing stored', () => {
+    const lines = readSmaLines();
+    expect(lines.length).toBeGreaterThanOrEqual(1);
+    expect(lines[0].id).toBeDefined();
+    expect(lines[0].period).toBeGreaterThan(0);
+  });
+
+  it('writeSmaLines / readSmaLines round-trips', () => {
+    const testLines: MaLineConfig[] = [
+      { id: 'sma-50', period: 50, color: '#00BCD4', enabled: true },
+      { id: 'sma-200', period: 200, color: '#4CAF50', enabled: false },
+    ];
+    writeSmaLines(testLines);
+    const read = readSmaLines();
+    expect(read).toHaveLength(2);
+    expect(read[0].period).toBe(50);
+    expect(read[0].enabled).toBe(true);
+    expect(read[1].color).toBe('#4CAF50');
+  });
+
+  it('readEmaLines returns defaults when nothing stored', () => {
+    const lines = readEmaLines();
+    expect(lines.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('writeEmaLines / readEmaLines round-trips', () => {
+    const testLines: MaLineConfig[] = [
+      { id: 'ema-12', period: 12, color: '#2196F3', enabled: true },
+    ];
+    writeEmaLines(testLines);
+    const read = readEmaLines();
+    expect(read).toHaveLength(1);
+    expect(read[0].period).toBe(12);
+  });
+});
+
 describe('clearAppStorage', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -219,7 +255,8 @@ describe('clearAppStorage', () => {
   it('removes all storage keys and reinitializes', () => {
     writeSavedWallets(['0x1234567890abcdef1234567890abcdef12345678']);
     writeTrackedPairs(['ETHUSDT']);
-    writeIndicatorColors({ ...readIndicatorColors(), sma: '#ff0000' });
+    writeIndicatorColors({ ...readIndicatorColors(), rsi: '#ff0000' });
+    writeSmaLines([{ id: 'sma-50', period: 50, color: '#00BCD4', enabled: true }]);
 
     clearAppStorage();
 
@@ -228,6 +265,7 @@ describe('clearAppStorage', () => {
       'ETHUSDT', 'BTCUSDT', 'USUALUSDT', 'VELODROMEUSDT', 'BATUSDT', 'BIOUSDT',
     ]);
     const colors = readIndicatorColors();
-    expect(colors.sma).not.toBe('#ff0000');
+    expect(colors.rsi).toBeTruthy();
+    expect(colors.rsi).not.toBe('#ff0000');
   });
 });

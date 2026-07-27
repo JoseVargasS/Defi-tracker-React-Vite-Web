@@ -17,8 +17,6 @@ export const CHART_THEME = {
   stochD: COLORS.stochD,
   stochLevelOver: COLORS.stochLevelOver,
   stochLevelUnder: COLORS.stochLevelUnder,
-  sma: COLORS.sma,
-  ema: COLORS.ema,
   rsi: "#a78bfa",
   bbLine: COLORS.bbLine,
   bbFill: COLORS.bbFill,
@@ -32,8 +30,6 @@ export const CHART_THEME = {
 };
 
 export const DEFAULT_INDICATOR_COLORS: IndicatorColors = {
-  sma: CHART_THEME.sma,
-  ema: CHART_THEME.ema,
   rsi: CHART_THEME.rsi,
   stochK: CHART_THEME.stochK,
   stochD: CHART_THEME.stochD,
@@ -48,7 +44,7 @@ export function getIndicatorColor(
   indicators: ChartIndicatorsState,
   key: IndicatorColorKey,
 ): string {
-  return indicators.colors[key] || DEFAULT_INDICATOR_COLORS[key];
+  return indicators.colors[key] || DEFAULT_INDICATOR_COLORS[key] || '#ffffff';
 }
 
 function calculateRSI(data: Candle[], period = 14): XY[] {

@@ -1,6 +1,7 @@
 import { APP_STORAGE_VERSION, DEFAULT_TRACKED_PAIRS, PAIR_SYMBOL_RE, WALLET_ADDRESS_RE } from '@/lib/config';
 import { DEFAULT_INDICATOR_COLORS } from '@/lib/chart/indicators';
-import type { IndicatorColorKey, IndicatorColors } from '@/lib/chart/types';
+import type { IndicatorColorKey, IndicatorColors, MaLineConfig } from '@/lib/chart/types';
+import { DEFAULT_SMA_LINES, DEFAULT_EMA_LINES } from '@/store/useMarketStore';
 
 export const STORAGE_KEYS = {
   version: 'defiTrackerStorageVersion',
@@ -8,6 +9,8 @@ export const STORAGE_KEYS = {
   coinsListCache: 'coinsListCache',
   savedWallets: 'savedWallets',
   chartIndicatorColors: 'chartIndicatorColors',
+  smaLines: 'chartSmaLines',
+  emaLines: 'chartEmaLines',
 } as const;
 
 const HEX_COLOR_RE = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
@@ -41,6 +44,43 @@ export function writeIndicatorColors(colors: IndicatorColors): IndicatorColors {
   });
   localStorage.setItem(STORAGE_KEYS.chartIndicatorColors, JSON.stringify(out));
   return out;
+}
+
+function sanitizeMaLines(raw: unknown, defaults: MaLineConfig[]): MaLineConfig[] {
+  if (!Array.isArray(raw)) return defaults.map(l => ({ ...l }));
+  const hexFallback = '#00BCD4';
+  return raw.map((item: unknown) => {
+    if (!item || typeof item !== 'object') return null;
+    const obj = item as Record<string, unknown>;
+    return {
+      id: typeof obj.id === 'string' ? obj.id : crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`,
+      period: typeof obj.period === 'number' && obj.period > 0 ? obj.period : 50,
+      color: sanitizeColor(obj.color) || hexFallback,
+      enabled: obj.enabled === true,
+    };
+  }).filter((l): l is MaLineConfig => l !== null);
+}
+
+export function readSmaLines(): MaLineConfig[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.smaLines);
+    return sanitizeMaLines(raw ? JSON.parse(raw) : null, DEFAULT_SMA_LINES);
+  } catch { return DEFAULT_SMA_LINES.map(l => ({ ...l })); }
+}
+
+export function writeSmaLines(lines: MaLineConfig[]): void {
+  localStorage.setItem(STORAGE_KEYS.smaLines, JSON.stringify(lines));
+}
+
+export function readEmaLines(): MaLineConfig[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.emaLines);
+    return sanitizeMaLines(raw ? JSON.parse(raw) : null, DEFAULT_EMA_LINES);
+  } catch { return DEFAULT_EMA_LINES.map(l => ({ ...l })); }
+}
+
+export function writeEmaLines(lines: MaLineConfig[]): void {
+  localStorage.setItem(STORAGE_KEYS.emaLines, JSON.stringify(lines));
 }
 
 export function readSavedWallets(): string[] {

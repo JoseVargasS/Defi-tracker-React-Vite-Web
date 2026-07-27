@@ -124,6 +124,7 @@ export const crosshairPlugin = {
     const moveListener = (event: MouseEvent) => {
       const c = chartAny;
       if (!canvas || !chart.ctx) return;
+      if (c._panActive) return;
       const rect = canvas.getBoundingClientRect();
       const mouseX = event.clientX - rect.left;
       const mouseY = event.clientY - rect.top;
@@ -270,6 +271,7 @@ export const currentPricePlugin = {
   afterDraw(chart: Chart) {
     if (!chart.ctx || !chart.chartArea) return;
     const chartAny = chart as unknown as EnhancedChart;
+    if (chartAny._panActive) return;
     const priceScale = chart.scales?.price;
     const candles = chart.data.datasets[0]?.data;
     if (!priceScale || !candles?.length) return;
@@ -338,6 +340,7 @@ export const indicatorLegendPlugin = {
   afterDraw(chart: Chart) {
     if (!chart.ctx || !chart.chartArea) return;
     const chartAny = chart as unknown as EnhancedChart;
+    if (chartAny._panActive) return;
     const fallbackIndex =
       Math.max(0, (chart.data.datasets[0]?.data?.length ?? 0) - 1);
     const index = chartAny.crosshair?.snapIndex ?? fallbackIndex;
@@ -459,38 +462,85 @@ export const indicatorLegendPlugin = {
     }
 
     const dsList = chart.data.datasets as ChartDatasetLike[];
-    const smaDs = dsList.find((d: ChartDatasetLike) => d.label?.startsWith('SMA '));
-    const emaDs = dsList.find((d: ChartDatasetLike) => d.label?.startsWith('EMA '));
+    const maDs = dsList.filter((d: ChartDatasetLike) =>
+      d.label?.startsWith('SMA ') || d.label?.startsWith('EMA ')
+    );
 
-    if (smaDs || emaDs) {
+    if (maDs.length) {
       const x = chart.chartArea.left + 10;
       let y = chart.chartArea.top + 40;
-      const priceSmaData = smaDs ? asPoints(smaDs.data ?? []) : [];
-      const priceEmaData = emaDs ? asPoints(emaDs.data ?? []) : [];
-      const smaPoint = priceSmaData[index] || lastDefined(priceSmaData);
-      const emaPoint = priceEmaData[index] || lastDefined(priceEmaData);
-
-      if (smaDs && Number.isFinite(smaPoint?.y)) {
-        ctx.fillStyle = indColor(chartAny, 'sma');
-        ctx.fillText(`v SMA ${smaDs.label?.replace('SMA ', '')}`, x, y);
-        const textW = ctx.measureText(`v SMA ${smaDs.label?.replace('SMA ', '')}  `).width;
+      for (const ds of maDs) {
+        const label = ds.label as string;
+        const pts = asPoints(ds.data ?? []);
+        const pt = pts[index] || lastDefined(pts);
+        if (!Number.isFinite(pt?.y)) continue;
+        const c = (ds as { borderColor?: string }).borderColor;
+        ctx.fillStyle = c || '#fff';
+        ctx.fillText(`v ${label}`, x, y);
+        const textW = ctx.measureText(`v ${label}  `).width;
         ctx.fillStyle = '#f5f7fa';
-        ctx.fillText(Number(smaPoint!.y!).toFixed(6), x + textW, y);
+        ctx.fillText(Number(pt!.y!).toFixed(6), x + textW, y);
         y += 16;
-      }
-
-      if (emaDs && Number.isFinite(emaPoint?.y)) {
-        ctx.fillStyle = indColor(chartAny, 'ema');
-        ctx.fillText(`v EMA ${emaDs.label?.replace('EMA ', '')}`, x, y);
-        const textW = ctx.measureText(`v EMA ${emaDs.label?.replace('EMA ', '')}  `).width;
-        ctx.fillStyle = '#f5f7fa';
-        ctx.fillText(Number(emaPoint!.y!).toFixed(6), x + textW, y);
       }
     }
 
     ctx.restore();
   },
 };
+
+const VP_CACHE_QUANTIZE = 1e4;
+
+function drawVolumeProfileBars(
+  ctx: CanvasRenderingContext2D,
+  profile: VolumeProfileResult,
+  xScale: { getPixelForValue(v: number): number },
+  priceScale: { top: number; bottom: number; getPixelForValue(v: number): number },
+  xMin: number,
+  xMax: number,
+  settings: VolumeProfileSettings,
+) {
+  const visibleStart = xScale.getPixelForValue(xMin);
+  const visibleEnd = xScale.getPixelForValue(xMax);
+  const profileWidth = clamp(
+    Math.round((visibleEnd - visibleStart) * (settings.widthRatio ?? 0.22)),
+    settings.minWidth ?? 72,
+    settings.maxWidth ?? 200,
+  );
+  const xRight = visibleEnd - 2;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(visibleStart, priceScale.top, visibleEnd - visibleStart, priceScale.bottom - priceScale.top);
+  ctx.clip();
+
+  for (const row of profile.rows) {
+    if (row.total <= 0) continue;
+    const yTop = priceScale.getPixelForValue(row.high);
+    const yBottom = priceScale.getPixelForValue(row.low);
+    const y = Math.min(yTop, yBottom) + 1;
+    const height = Math.max(1, Math.abs(yBottom - yTop) - 1);
+    const width = Math.max(1, (row.total / profile.maxVolume) * profileWidth);
+    const x = xRight - width;
+    const upWidth = row.total > 0 ? width * (row.up / row.total) : 0;
+    const downWidth = width - upWidth;
+    const isPoc = row === profile.poc;
+
+    ctx.fillStyle = isPoc ? 'rgba(242, 201, 76, 0.30)' : 'rgba(242, 54, 69, 0.32)';
+    ctx.fillRect(x, y, downWidth, height);
+    ctx.fillStyle = isPoc ? 'rgba(242, 201, 76, 0.42)' : 'rgba(0, 192, 135, 0.32)';
+    ctx.fillRect(x + downWidth, y, upWidth, height);
+  }
+
+  const pocY = priceScale.getPixelForValue(profile.poc.price);
+  ctx.strokeStyle = 'rgba(242, 201, 76, 0.58)';
+  ctx.lineWidth = 1.2;
+  ctx.setLineDash([2, 2]);
+  ctx.beginPath();
+  ctx.moveTo(visibleStart, pocY);
+  ctx.lineTo(visibleEnd, pocY);
+  ctx.stroke();
+  ctx.restore();
+}
 
 export const fixedRangeVolumeProfilePlugin = {
   id: 'fixedRangeVolumeProfile',
@@ -510,9 +560,17 @@ export const fixedRangeVolumeProfilePlugin = {
     const rawCandles = (chart.data.datasets[0]?.data as unknown as { x: number }[] | undefined) || [];
     if (!isScaleVisible(priceScale as unknown as ScaleLike) || !xScale || rawCandles.length < 2) return;
 
-    // ponytail: profile recomputes on every render from the visible X window — zoom and pan reshape it
     const xMin = xScale.min;
     const xMax = xScale.max;
+    const fingerprint = `${Math.round(xMin / VP_CACHE_QUANTIZE)}-${Math.round(xMax / VP_CACHE_QUANTIZE)}-${rawCandles.length}`;
+
+    const cached = (chartAny as unknown as Record<string, unknown>)._vpCache as VolumeProfileResult | null | undefined;
+    if (cached && (chartAny._panActive || chartAny._vpCacheFingerprint === fingerprint)) {
+      chartAny._volumeProfile = cached;
+      drawVolumeProfileBars(chart.ctx, cached, xScale, priceScale as { top: number; bottom: number; getPixelForValue(v: number): number }, xMin, xMax, chartAny._volumeProfileSettings || {});
+      return;
+    }
+
     const visibleCandles = rawCandles.filter((c) => c.x >= xMin && c.x <= xMax);
     if (visibleCandles.length < 2) return;
 
@@ -529,61 +587,9 @@ export const fixedRangeVolumeProfilePlugin = {
       return;
 
     chartAny._volumeProfile = profile;
-    const ctx = chart.ctx;
-    const visibleStart = xScale.getPixelForValue(xMin);
-    const visibleEnd = xScale.getPixelForValue(xMax);
-    const profileWidth = clamp(
-      Math.round((visibleEnd - visibleStart) * (settings.widthRatio ?? 0.22)),
-      settings.minWidth ?? 72,
-      settings.maxWidth ?? 200,
-    );
-    const xRight = visibleEnd - 2;
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(
-      visibleStart,
-      priceScale.top,
-      visibleEnd - visibleStart,
-      priceScale.bottom - priceScale.top,
-    );
-    ctx.clip();
-
-    profile.rows.forEach((row: VPRow) => {
-      if (row.total <= 0) return;
-      const yTop = priceScale.getPixelForValue(row.high);
-      const yBottom = priceScale.getPixelForValue(row.low);
-      const y = Math.min(yTop, yBottom) + 1;
-      const height = Math.max(1, Math.abs(yBottom - yTop) - 1);
-      const width = Math.max(
-        1,
-        (row.total / profile.maxVolume) * profileWidth,
-      );
-      const x = xRight - width;
-      const upWidth =
-        row.total > 0 ? width * (row.up / row.total) : 0;
-      const downWidth = width - upWidth;
-      const isPoc = row === profile.poc;
-
-      ctx.fillStyle = isPoc
-        ? 'rgba(242, 201, 76, 0.30)'
-        : 'rgba(242, 54, 69, 0.32)';
-      ctx.fillRect(x, y, downWidth, height);
-      ctx.fillStyle = isPoc
-        ? 'rgba(242, 201, 76, 0.42)'
-        : 'rgba(0, 192, 135, 0.32)';
-      ctx.fillRect(x + downWidth, y, upWidth, height);
-    });
-
-    const pocY = priceScale.getPixelForValue(profile.poc.price);
-    ctx.strokeStyle = 'rgba(242, 201, 76, 0.58)';
-    ctx.lineWidth = 1.2;
-    ctx.setLineDash([2, 2]);
-    ctx.beginPath();
-    ctx.moveTo(visibleStart, pocY);
-    ctx.lineTo(visibleEnd, pocY);
-    ctx.stroke();
-    ctx.restore();
+    chartAny._vpCacheFingerprint = fingerprint;
+    (chartAny as unknown as Record<string, unknown>)._vpCache = profile;
+    drawVolumeProfileBars(chart.ctx, profile, xScale, priceScale as { top: number; bottom: number; getPixelForValue(v: number): number }, xMin, xMax, settings);
   },
   afterDraw(chart: Chart) {
     const chartAny = chart as unknown as EnhancedChart;
@@ -820,6 +826,7 @@ export function createAdvancedTooltipPlugin() {
       if (
         !chart.ctx ||
         !chart.chartArea ||
+        ec._panActive ||
         !ec.crosshair ||
         ec.crosshair.x === null
       )
