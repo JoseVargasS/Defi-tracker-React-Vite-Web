@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Header } from '@/components/layout/Header';
+import { Header } from '@/components/layout/Header'
+import AiChatPanel from '@/components/ai/AiChatPanel';
 import { Footer } from '@/components/layout/Footer';
 import { PairSearch } from '@/components/market/PairSearch';
 import { TrackedPairs } from '@/components/market/TrackedPairs';
@@ -217,7 +218,7 @@ export default function App() {
                       />
                     </Suspense>
                   ) : (
-                    <TradingViewWidget />
+                    <TradingViewWidget symbol={currentPair} />
                   )}
                 </div>
               </>
@@ -245,6 +246,7 @@ export default function App() {
           <TransactionSection />
         </section>
       </main>
+      <AiChatPanel />
       <Footer />
     </>
   );

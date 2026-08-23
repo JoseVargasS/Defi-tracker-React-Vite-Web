@@ -12,6 +12,8 @@ vi.mock('@/lib/storage', () => ({
   migrateAppStorage: vi.fn(),
   readTrackedPairs: vi.fn().mockReturnValue([]),
   writeTrackedPairs: vi.fn(),
+  readAiModel: vi.fn().mockReturnValue(null),
+  writeAiModel: vi.fn(),
   readSmaLines: vi.fn().mockReturnValue([]),
   writeSmaLines: vi.fn(),
   readEmaLines: vi.fn().mockReturnValue([]),

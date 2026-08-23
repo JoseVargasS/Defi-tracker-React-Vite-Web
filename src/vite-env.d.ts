@@ -7,6 +7,8 @@ interface ImportMetaEnv {
   readonly VITE_COINSTATS_API_KEY?: string;
   readonly VITE_ETH_API?: string;
   readonly VITE_ETH_KEY?: string;
+  readonly VITE_OPENCODE_GO_KEY?: string;
+  readonly VITE_OPENCODE_MODEL?: string;
 }
 
 interface ImportMeta {

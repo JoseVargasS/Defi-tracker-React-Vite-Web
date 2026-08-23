@@ -11,6 +11,15 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  server: {
+    proxy: {
+      '/api/zen': {
+        target: 'https://opencode.ai/zen/v1',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/zen/, '/chat/completions'),
+      },
+    },
+  },
   test: {
     globals: true,
     environment: 'jsdom',

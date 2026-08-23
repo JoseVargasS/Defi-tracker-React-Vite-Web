@@ -11,6 +11,7 @@ export const STORAGE_KEYS = {
   chartIndicatorColors: 'chartIndicatorColors',
   smaLines: 'chartSmaLines',
   emaLines: 'chartEmaLines',
+  aiModel: 'aiModel',
 } as const;
 
 const HEX_COLOR_RE = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
@@ -148,6 +149,23 @@ export function writeTrackedPairs(pairs: string[]): void {
     STORAGE_KEYS.trackedPairs,
     JSON.stringify(sanitizePairs(pairs))
   );
+}
+
+export function readAiModel(): string | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.aiModel);
+    return typeof raw === 'string' && raw ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeAiModel(modelId: string): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.aiModel, modelId);
+  } catch {
+    // almacenamiento lleno o bloqueado: la eleccion solo vive en la sesion
+  }
 }
 
 export function migrateAppStorage(): void {

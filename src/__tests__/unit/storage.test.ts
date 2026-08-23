@@ -4,6 +4,8 @@ import {
   writeSavedWallets,
   readTrackedPairs,
   writeTrackedPairs,
+  readAiModel,
+  writeAiModel,
   readIndicatorColors,
   writeIndicatorColors,
   readSmaLines,
@@ -98,6 +100,21 @@ describe('readTrackedPairs / writeTrackedPairs round-trip', () => {
   it('writeTrackedPairs normalizes to uppercase', () => {
     writeTrackedPairs(['ethusdt', 'Btcusdt']);
     expect(readTrackedPairs()).toEqual(['ETHUSDT', 'BTCUSDT']);
+  });
+});
+
+describe('readAiModel / writeAiModel round-trip', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('read returns null when nothing stored', () => {
+    expect(readAiModel()).toBeNull();
+  });
+
+  it('write then read returns same model id', () => {
+    writeAiModel('big-pickle');
+    expect(readAiModel()).toBe('big-pickle');
   });
 });
 

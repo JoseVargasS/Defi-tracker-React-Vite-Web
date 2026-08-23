@@ -8,6 +8,7 @@ export const ETH_API =
   import.meta.env.VITE_ETH_API || 'https://api.etherscan.io/v2/api';
 export const ETH_KEY = import.meta.env.VITE_ETH_KEY || '';
 
+export const OPENCODE_GO_KEY = import.meta.env.VITE_OPENCODE_GO_KEY || '';
 export const HAS_COINSTATS_CONFIG = Boolean(
   COINSTATS_API_KEY && COINSTATS_API_KEY !== 'replace-me'
 );
