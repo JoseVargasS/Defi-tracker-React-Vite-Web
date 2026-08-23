@@ -12,7 +12,7 @@ describe('TradingViewWidget', () => {
   });
 
   it('renders container divs', () => {
-    const { container } = render(<TradingViewWidget />);
+    const { container } = render(<TradingViewWidget symbol="ETHUSDT" />);
     const outerDiv = container.querySelector('.tradingview-widget-container');
     expect(outerDiv).toBeTruthy();
     const widgetDiv = container.querySelector('.tradingview-widget-container__widget');
@@ -20,13 +20,13 @@ describe('TradingViewWidget', () => {
   });
 
   it('renders copyright footer', () => {
-    const { container } = render(<TradingViewWidget />);
+    const { container } = render(<TradingViewWidget symbol="ETHUSDT" />);
     const copyright = container.querySelector('.tradingview-widget-copyright');
     expect(copyright).toBeTruthy();
   });
 
   it('creates a script element with correct src', () => {
-    render(<TradingViewWidget />);
+    render(<TradingViewWidget symbol="ETHUSDT" />);
     const scripts = document.querySelectorAll('script');
     const tvScript = Array.from(scripts).find((s) =>
       s.src.includes('s3.tradingview.com/external-embedding'),
@@ -36,28 +36,33 @@ describe('TradingViewWidget', () => {
     expect(tvScript!.type).toBe('text/javascript');
   });
 
-  it('config has ETHUSDT symbol', () => {
-    render(<TradingViewWidget />);
-    const scripts = document.querySelectorAll('script');
-    const tvScript = Array.from(scripts).find((s) =>
-      s.src.includes('s3.tradingview.com'),
-    );
-    const config = JSON.parse(tvScript!.innerHTML);
-    expect(config.symbol).toBe('BINANCE:ETHUSDT');
+  it('config uses the symbol prop', () => {
+    const { rerender } = render(<TradingViewWidget symbol="ETHUSDT" />);
+    const getTvConfig = () => {
+      const scripts = document.querySelectorAll('script');
+      const tvScript = Array.from(scripts).find((s) =>
+        s.src.includes('s3.tradingview.com'),
+      );
+      return JSON.parse(tvScript!.innerHTML);
+    };
+    expect(getTvConfig().symbol).toBe('BINANCE:ETHUSDT');
+
+    rerender(<TradingViewWidget symbol="BTCUSDT" />);
+    expect(getTvConfig().symbol).toBe('BINANCE:BTCUSDT');
   });
 
-  it('config has interval 240', () => {
-    render(<TradingViewWidget />);
+  it('config has interval 30', () => {
+    render(<TradingViewWidget symbol="ETHUSDT" />);
     const scripts = document.querySelectorAll('script');
     const tvScript = Array.from(scripts).find((s) =>
       s.src.includes('s3.tradingview.com'),
     );
     const config = JSON.parse(tvScript!.innerHTML);
-    expect(config.interval).toBe('240');
+    expect(config.interval).toBe('30');
   });
 
   it('config removes compareSymbols', () => {
-    render(<TradingViewWidget />);
+    render(<TradingViewWidget symbol="ETHUSDT" />);
     const scripts = document.querySelectorAll('script');
     const tvScript = Array.from(scripts).find((s) =>
       s.src.includes('s3.tradingview.com'),
@@ -66,8 +71,8 @@ describe('TradingViewWidget', () => {
     expect(config.compareSymbols).toEqual([]);
   });
 
-  it('config has SMA, Divergence, and Stochastic RSI studies', () => {
-    render(<TradingViewWidget />);
+  it('config has SMA, Divergence, and Net Volume studies', () => {
+    render(<TradingViewWidget symbol="ETHUSDT" />);
     const scripts = document.querySelectorAll('script');
     const tvScript = Array.from(scripts).find((s) =>
       s.src.includes('s3.tradingview.com'),
@@ -76,22 +81,24 @@ describe('TradingViewWidget', () => {
     expect(config.studies).toEqual([
       'STD;SMA',
       'STD;Divergence%1Indicator',
-      'STD;Stochastic_RSI',
+      'STD;Net%1Volume',
     ]);
   });
 
-  it('config has details enabled', () => {
-    render(<TradingViewWidget />);
+  it('config has details disabled and side toolbar hidden', () => {
+    render(<TradingViewWidget symbol="ETHUSDT" />);
     const scripts = document.querySelectorAll('script');
     const tvScript = Array.from(scripts).find((s) =>
       s.src.includes('s3.tradingview.com'),
     );
     const config = JSON.parse(tvScript!.innerHTML);
-    expect(config.details).toBe(true);
+    expect(config.details).toBe(false);
+    expect(config.hide_side_toolbar).toBe(true);
+    expect(config.support_host).toBe('https://www.tradingview.com');
   });
 
   it('cleans up script on unmount', () => {
-    const { unmount } = render(<TradingViewWidget />);
+    const { unmount } = render(<TradingViewWidget symbol="ETHUSDT" />);
     expect(document.querySelectorAll('script').length).toBeGreaterThan(0);
     unmount();
     expect(document.querySelectorAll('script').length).toBe(0);
