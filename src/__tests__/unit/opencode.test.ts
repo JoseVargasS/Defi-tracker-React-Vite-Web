@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+vi.mock('@/lib/config', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  OPENCODE_GO_KEY: 'test-key',
+}));
+
 vi.mock('@/api/binance', () => ({
   fetchKlines: vi.fn(),
   fetchPrice: vi.fn().mockResolvedValue(null),
