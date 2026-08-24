@@ -57,6 +57,7 @@ jobs:
           VITE_ETH_API: https://api.etherscan.io/v2/api
           VITE_ETH_KEY: ${{ secrets.ETH_KEY }}
           VITE_OPENCODE_GO_KEY: ${{ secrets.VITE_OPENCODE_GO_KEY }}
+          VITE_AI_PROXY_URL: ${{ vars.VITE_AI_PROXY_URL }}
       - name: Debug dist contents
         run: ls -la dist/ && ls -la dist/assets/
       - name: Upload Pages artifact

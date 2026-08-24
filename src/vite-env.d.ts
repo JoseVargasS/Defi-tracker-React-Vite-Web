@@ -9,6 +9,7 @@ interface ImportMetaEnv {
   readonly VITE_ETH_KEY?: string;
   readonly VITE_OPENCODE_GO_KEY?: string;
   readonly VITE_OPENCODE_MODEL?: string;
+  readonly VITE_AI_PROXY_URL?: string;
 }
 
 interface ImportMeta {

@@ -3,11 +3,15 @@ import { fetchKlines, fetchPrice } from '@/api/binance';
 import { calculateSMA } from '@/lib/chart/indicators';
 import { normalizeKline, type Candle, type KlineRaw } from '@/lib/chart/normalize';
 
-const GO_ENDPOINT = import.meta.env.DEV
-  ? '/api/zen'
-  : 'https://opencode.ai/zen/v1/chat/completions';
 // ponytail: hy3-free es el free mas directo; cambiar via VITE_OPENCODE_MODEL o el selector del chat
 export const DEFAULT_MODEL = import.meta.env.VITE_OPENCODE_MODEL || 'hy3-free';
+
+// Produccion usa el proxy Cloudflare (opencode.ai no soporta CORS desde el navegador);
+// si no hay proxy configurado cae al endpoint directo (requiere key en el bundle).
+const AI_PROXY_URL = import.meta.env.VITE_AI_PROXY_URL || '';
+const GO_ENDPOINT = import.meta.env.DEV
+  ? '/api/zen'
+  : AI_PROXY_URL || 'https://opencode.ai/zen/v1/chat/completions';
 
 // Free verificadas contra /zen/v1/chat/completions (muse-spark free usa otro endpoint y queda fuera)
 export interface FreeModel {
@@ -47,7 +51,9 @@ export async function goChatCompletion(
   opts: GoCompletionOptions = {},
 ): Promise<string> {
   const apiKey = OPENCODE_GO_KEY;
-  if (!apiKey || apiKey === 'replace-me') {
+  const hasKey = Boolean(apiKey && apiKey !== 'replace-me');
+  // Sin key local solo se permite si el proxy de produccion pone la key el
+  if (!hasKey && !(import.meta.env.PROD && AI_PROXY_URL)) {
     throw new Error('Falta OPENCODE_GO_KEY en .env');
   }
   let lastError = 'Error desconocido';
@@ -58,7 +64,7 @@ export async function goChatCompletion(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
+          ...(hasKey ? { Authorization: `Bearer ${apiKey}` } : {}),
         },
         signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
         body: JSON.stringify({
