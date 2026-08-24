@@ -218,7 +218,7 @@ export default function App() {
                       />
                     </Suspense>
                   ) : (
-                    <TradingViewWidget symbol={currentPair} />
+                    <TradingViewWidget key={currentPair} symbol={currentPair} />
                   )}
                 </div>
               </>

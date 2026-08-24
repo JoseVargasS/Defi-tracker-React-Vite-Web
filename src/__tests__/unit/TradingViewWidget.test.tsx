@@ -51,6 +51,18 @@ describe('TradingViewWidget', () => {
     expect(getTvConfig().symbol).toBe('BINANCE:BTCUSDT');
   });
 
+  it('elimina iframes viejos al cambiar de par', () => {
+    const { container, rerender, unmount } = render(<TradingViewWidget symbol="ETHUSDT" />);
+    const oldIframe = document.createElement('iframe');
+    container.querySelector('.tradingview-widget-container__widget')!.appendChild(oldIframe);
+    expect(container.querySelectorAll('iframe').length).toBe(1);
+
+    rerender(<TradingViewWidget symbol="BTCUSDT" />);
+    expect(container.querySelectorAll('iframe').length).toBe(0);
+
+    unmount();
+  });
+
   it('config has interval 30', () => {
     render(<TradingViewWidget symbol="ETHUSDT" />);
     const scripts = document.querySelectorAll('script');

@@ -48,6 +48,7 @@ function TradingViewWidget({ symbol }: TradingViewWidgetProps) {
         }`;
       current.appendChild(script);
       return () => {
+        current.querySelectorAll('iframe').forEach((f) => f.remove());
         const widgetDiv = current.querySelector('.tradingview-widget-container__widget');
         if (widgetDiv) widgetDiv.innerHTML = '';
         current.querySelectorAll('script').forEach((s) => s.remove());
