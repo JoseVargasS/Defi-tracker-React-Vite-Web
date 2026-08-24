@@ -786,6 +786,8 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
                 },
                 zoom: {
                   mode: "x",
+                  // TradingView: rueda sobre el grafico = zoom horizontal;
+                  // rueda sobre el eje de precio = zoom vertical de ese panel
                   scaleMode: "y",
                   wheel: {
                     enabled: !mActive,
@@ -801,8 +803,8 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
                     void maybeLoadMore(ec);
                   },
                 },
+                // sin limites en y: pan y zoom vertical libres como TradingView
                 limits: {
-                  y: { min: "original", max: "original" },
                   x: { minRange: 6 },
                 },
               },
