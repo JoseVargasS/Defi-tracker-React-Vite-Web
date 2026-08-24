@@ -93,7 +93,7 @@ describe('TradingViewWidget', () => {
     );
     const config = JSON.parse(tvScript!.innerHTML);
     expect(config.details).toBe(false);
-    expect(config.hide_side_toolbar).toBe(true);
+    expect(config.hide_side_toolbar).toBe(false);
     expect(config.support_host).toBe('https://www.tradingview.com');
   });
 

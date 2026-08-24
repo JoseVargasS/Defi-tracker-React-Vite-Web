@@ -21,7 +21,7 @@ function TradingViewWidget({ symbol }: TradingViewWidgetProps) {
           "allow_symbol_change": true,
           "calendar": false,
           "details": false,
-          "hide_side_toolbar": true,
+          "hide_side_toolbar": false,
           "hide_top_toolbar": false,
           "hide_legend": false,
           "hide_volume": false,
