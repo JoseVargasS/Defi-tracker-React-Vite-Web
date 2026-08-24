@@ -120,36 +120,53 @@ export const crosshairPlugin = {
     const chartAny = chart as unknown as EnhancedChart;
     chartAny.crosshair = { x: null, y: null, snapIndex: null, moveListener: null, leaveListener: null, canvas: null };
     const canvas = chart.canvas;
+    // ponytail: throttle con rAF — max un escaneo + redraw por frame, no uno por mousemove
+    let rafId: number | null = null;
+    let pendingX = 0;
+    let pendingY = 0;
 
     const moveListener = (event: MouseEvent) => {
       const c = chartAny;
       if (!canvas || !chart.ctx) return;
       if (c._panActive) return;
-      const rect = canvas.getBoundingClientRect();
-      const mouseX = event.clientX - rect.left;
-      const mouseY = event.clientY - rect.top;
-      let snapIndex: number | null = null;
-      let snapX = mouseX;
-      let minDist = Infinity;
-      c.data.datasets[0]?.data?.forEach((item, index) => {
-        const pt = item as unknown as { x: number };
-        const xPixel = chart.scales.x?.getPixelForValue(pt.x);
-        if (xPixel == null) return;
-        const distance = Math.abs(mouseX - xPixel);
-        if (distance < minDist) {
-          minDist = distance;
-          snapIndex = index;
-          snapX = xPixel;
-        }
+      pendingX = event.clientX;
+      pendingY = event.clientY;
+      if (rafId != null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        // destroy nullea crosshair; mouseleave lo reemplaza pero sigue activo.
+        // si crosshair es null (chart destruido) no redibujamos sobre un chart muerto
+        if (!chart.ctx || !chartAny.crosshair) return;
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = pendingX - rect.left;
+        const mouseY = pendingY - rect.top;
+        let snapIndex: number | null = null;
+        let snapX = mouseX;
+        let minDist = Infinity;
+        c.data.datasets[0]?.data?.forEach((item, index) => {
+          const pt = item as unknown as { x: number };
+          const xPixel = chart.scales.x?.getPixelForValue(pt.x);
+          if (xPixel == null) return;
+          const distance = Math.abs(mouseX - xPixel);
+          if (distance < minDist) {
+            minDist = distance;
+            snapIndex = index;
+            snapX = xPixel;
+          }
+        });
+        c.crosshair.x = snapX;
+        c.crosshair.y = mouseY;
+        c.crosshair.snapIndex = snapIndex;
+        chart.draw();
       });
-      c.crosshair.x = snapX;
-      c.crosshair.y = mouseY;
-      c.crosshair.snapIndex = snapIndex;
-      chart.draw();
     };
 
     const leaveListener = () => {
       if (!canvas || !chart.ctx) return;
+      if (rafId != null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
     chartAny.crosshair = { x: null, y: null, snapIndex: null, moveListener: null, leaveListener: null, canvas: null };
       chart.draw();
     };
@@ -177,7 +194,8 @@ export const crosshairPlugin = {
       !chart.ctx ||
       !chart.chartArea ||
       !chartAny.crosshair ||
-      chartAny.crosshair.x === null
+      chartAny.crosshair.x === null ||
+      chartAny._panActive
     )
       return;
 

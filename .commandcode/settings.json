@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(git:*)",
+      "Shell(git add -p src/components/market/CandlestickChart.tsx < \"C:\\Users\\JoseV\\AppData\\Local\\Temp\\commandcode\\C--Users-JoseV-Desktop-DeFi-tracker-React\\9d5cbfd1-4fa1-4512-8376-f0e366171bc7\\scratchpad\\chart.txt\")",
+      "Shell(git add -p src/lib/chart/plugins/index.ts < \"C:\\Users\\JoseV\\AppData\\Local\\Temp\\commandcode\\C--Users-JoseV-Desktop-DeFi-tracker-React\\9d5cbfd1-4fa1-4512-8376-f0e366171bc7\\scratchpad\\plugins-perf.txt\")",
+      "Shell(git diff --cached -- src/lib/chart/plugins/index.ts > \"C:\\Users\\JoseV\\AppData\\Local\\Temp\\commandcode\\C--Users-JoseV-Desktop-DeFi-tracker-React\\9d5cbfd1-4fa1-4512-8376-f0e366171bc7\\scratchpad\\plugins-staged.patch\" && git restore --staged src/lib/chart/plugins/index.ts && git diff --cached --stat)",
+      "Shell(findstr:*)",
+      "Shell(git add src/lib/utils.ts src/components/wallet/ChainCard.tsx src/__tests__/unit/utils.test.ts src/__tests__/unit/ChainCard.test.tsx && git diff -- src/lib/chart/plugins/index.ts > \"C:\\Users\\JoseV\\AppData\\Local\\Temp\\commandcode\\C--Users-JoseV-Desktop-DeFi-tracker-React\\9d5cbfd1-4fa1-4512-8376-f0e366171bc7\\scratchpad\\plugins-rest.patch\" && git diff --stat -- src/lib/chart/plugins/index.ts)",
+      "Shell(git apply --cached --recount \"C:\\Users\\JoseV\\AppData\\Local\\Temp\\commandcode\\C--Users-JoseV-Desktop-DeFi-tracker-React\\9d5cbfd1-4fa1-4512-8376-f0e366171bc7\\scratchpad\\plugins-rest.patch\" && git add -p src/components/market/CandlestickChart.tsx < \"C:\\Users\\JoseV\\AppData\\Local\\Temp\\commandcode\\C--Users-JoseV-Desktop-DeFi-tracker-React\\9d5cbfd1-4fa1-4512-8376-f0e366171bc7\\scratchpad\\scale.txt\")",
+      "Shell(git add src/styles/general.css src/lib/config.ts && git diff -- src/lib/chart/plugins/index.ts > \"C:\\Users\\JoseV\\AppData\\Local\\Temp\\commandcode\\C--Users-JoseV-Desktop-DeFi-tracker-React\\9d5cbfd1-4fa1-4512-8376-f0e366171bc7\\scratchpad\\plugins-theme.patch\" && git diff --stat -- src/lib/chart/plugins/index.ts)"
+    ],
+    "deny": [],
+    "defaultMode": "default"
+  }
+}

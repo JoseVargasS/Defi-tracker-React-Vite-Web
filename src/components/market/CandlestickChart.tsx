@@ -76,6 +76,13 @@ export interface CandlestickChartProps {
   resetSignal: number;
 }
 
+// ponytail: la vista inicial muestra las ultimas N velas encuadradas (como TradingView),
+// no toda la historia comprimida; mejora lectura y rendimiento al renderizar menos puntos
+const DEFAULT_VISIBLE_BARS = 150;
+// ponytail: margen de velas a cada lado de la ventana visible que se mantienen en los
+// datasets; evita huecos al arrastrar y limita los puntos que Chart.js redibuja por frame
+const VIEW_MARGIN_BARS = 200;
+
 interface TechnicalSeries {
   bands: { upper: XY[]; middle: XY[]; lower: XY[] };
   volume: { x: number; y: number; q: number; color: string }[];
@@ -87,6 +94,41 @@ interface TechnicalSeries {
 
 const smaCache = new Map<string, XY[]>();
 const emaCache = new Map<string, XY[]>();
+
+// ponytail: recorta series de indicadores a una ventana [lo, hi] por x; los valores
+// ya incluyen warmup, solo se reducen los puntos a renderizar
+function sliceSeriesToWindow(series: TechnicalSeries, lo: number, hi: number): TechnicalSeries {
+  const inXY = (arr: XY[]) => arr.filter((p) => p.x >= lo && p.x <= hi);
+  return {
+    bands: {
+      upper: inXY(series.bands.upper),
+      middle: inXY(series.bands.middle),
+      lower: inXY(series.bands.lower),
+    },
+    volume: series.volume.filter((p) => p.x >= lo && p.x <= hi),
+    stochRsi: { k: inXY(series.stochRsi.k), d: inXY(series.stochRsi.d) },
+    rsi: inXY(series.rsi),
+    sma: Object.fromEntries(Object.entries(series.sma).map(([k, v]) => [k, inXY(v)])),
+    ema: Object.fromEntries(Object.entries(series.ema).map(([k, v]) => [k, inXY(v)])),
+  };
+}
+
+function buildViewportDatasets(
+  symbol: string,
+  raw: Candle[],
+  series: TechnicalSeries,
+  indicators: ChartIndicatorsState,
+  range: { min: number; max: number },
+  marginBars: number,
+): ChartDatasetLike[] {
+  const spacing = raw.length > 1 ? raw[1]!.x - raw[0]!.x : 0;
+  const marginMs = spacing * marginBars;
+  const lo = range.min - marginMs;
+  const hi = range.max + marginMs;
+  const candlesWin = raw.filter((c) => c.x >= lo && c.x <= hi);
+  if (!candlesWin.length) return buildDatasets(symbol, raw, series, indicators);
+  return buildDatasets(symbol, candlesWin, sliceSeriesToWindow(series, lo, hi), indicators);
+}
 
 function getDataFingerprint(data: Candle[]): string {
   return `${data[0]?.x ?? 0}-${data[data.length - 1]?.x ?? 0}`;
@@ -596,9 +638,7 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
     if (loadingMoreRef.current) return;
     if (!chart) return;
     const xScale = chart.scales?.x;
-    const data = chart.data.datasets[0]?.data as unknown as
-      | { x: number }[]
-      | undefined;
+    const data = rawDataRef.current;
     if (!xScale || !data || data.length === 0) return;
     if (data.length >= MAX_CHART_BAR_COUNT) return;
 
@@ -632,11 +672,13 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
       const oldMin = xScale.min;
       const oldMax = xScale.max;
 
-      chart.data.datasets = buildDatasets(
+      chart.data.datasets = buildViewportDatasets(
         symbolKey,
         newCandles,
         newSeries,
         chart._indicators,
+        { min: oldMin, max: oldMax },
+        VIEW_MARGIN_BARS,
       ) as unknown as typeof chart.data.datasets;
       chart.update("none");
 
@@ -750,16 +792,52 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
         const ctx = canvas.getContext("2d");
         if (!ctx || destroyed) return;
 
+        const scales = createScales(interval, inds);
+        const startIndex = Math.max(0, raw.length - DEFAULT_VISIBLE_BARS);
+        const initialXMin = raw[startIndex]!.x;
+        const initialXMax = raw[raw.length - 1]!.x;
+        (scales.x as { min?: number; max?: number }).min = initialXMin;
+        (scales.x as { min?: number; max?: number }).max = initialXMax;
+
+        // ponytail: re-recorta los datasets a la ventana visible actual; se llama al
+        // terminar pan/zoom para mover el buffer de velas sin redibujar todo por frame
+        const resliceToView = (c: EnhancedChart) => {
+          const xs = c.scales?.x;
+          const rawCur = rawDataRef.current;
+          const seriesCur = fullSeriesRef.current;
+          if (!xs || xs.min == null || xs.max == null || !rawCur.length || !seriesCur) return;
+          c.data.datasets = buildViewportDatasets(
+            c._symbol,
+            rawCur,
+            seriesCur,
+            c._indicators ?? inds,
+            { min: xs.min, max: xs.max },
+            VIEW_MARGIN_BARS,
+          ) as never;
+          c.update("none");
+        };
+
         const chart = new ChartCtor(ctx, {
           type: "candlestick",
           data: {
-            datasets: buildDatasets(symbol, raw, fullSeries, inds) as never,
+            datasets: buildViewportDatasets(
+              symbol,
+              raw,
+              fullSeries,
+              inds,
+              { min: initialXMin, max: initialXMax },
+              VIEW_MARGIN_BARS,
+            ) as never,
           },
           options: {
             responsive: true,
             maintainAspectRatio: false,
             animation: false,
             parsing: false,
+            backgroundColor: CHART_THEME.bg,
+            // ponytail: hover de Chart.js desactivado; crosshair/tooltip/medir usan
+            // sus propios listeners, asi un pan frame no recalcula la interaccion
+            events: [],
             interaction: { mode: "nearest", intersect: false },
             layout: { padding: { top: 4, bottom: 0, left: 4, right: 14 } },
             plugins: {
@@ -768,6 +846,8 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
               zoom: {
                 pan: {
                   enabled: !mActive,
+                  // grafico libre en ambas direcciones; los paneles de indicadores
+                  // quedan clavados en vertical via limits abajo
                   mode: "xy",
                   onPanStart: ({ chart: c }: { chart: EnhancedChart }) => {
                     panActiveRef.current = true;
@@ -782,6 +862,7 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
                     ec._userMovedPan = true;
                     ec._visibleCount = visibleCandleCount(ec);
                     void maybeLoadMore(ec);
+                    resliceToView(ec);
                   },
                 },
                 zoom: {
@@ -801,15 +882,21 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
                     ec._userMovedPan = true;
                     ec._visibleCount = visibleCandleCount(ec);
                     void maybeLoadMore(ec);
+                    resliceToView(ec);
                   },
                 },
-                // sin limites en y: pan y zoom vertical libres como TradingView
+                // sin limites en y del precio: pan y zoom vertical libres como TradingView.
+                // los paneles de indicadores (volumen, RSI, stoch) se clavan en su rango
+                // original: se mueven solo horizontal, jamas vertical
                 limits: {
                   x: { minRange: 6 },
+                  volume: { min: "original", max: "original" },
+                  stochRsi: { min: "original", max: "original" },
+                  rsi: { min: "original", max: "original" },
                 },
               },
             },
-            scales: createScales(interval, inds) as never,
+            scales: scales as never,
           },
           plugins: [
             rightScaleBackgroundPlugin,
@@ -831,7 +918,7 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
           _measure: { active: mActive, start: null, end: null, preview: null },
           _volumeProfileSettings: {},
           _userMovedPan: false,
-          _visibleCount: 0,
+          _visibleCount: Math.min(DEFAULT_VISIBLE_BARS, raw.length),
           _panActive: false,
           _vpCacheFingerprint: '',
         });
@@ -890,27 +977,28 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
         chart._fullLastTimestamp = raw.at(-1)?.x ?? null;
         chart._indicators = { ...indicatorsRef.current };
 
-        chart.data.datasets = buildDatasets(
+        // ventana a mostrar: la que tenia el usuario si movio el grafico, si no las ultimas N
+        const targetCount =
+          userMoved && prevVisible > 0
+            ? Math.min(prevVisible, raw.length)
+            : Math.min(DEFAULT_VISIBLE_BARS, raw.length);
+        const targetMin = raw[raw.length - targetCount]!.x;
+        const targetMax = raw[raw.length - 1]!.x;
+
+        const scales = createScales(interval, indicatorsRef.current);
+        (scales.x as { min?: number; max?: number }).min = targetMin;
+        (scales.x as { min?: number; max?: number }).max = targetMax;
+        chart.options.scales = scales as never;
+
+        chart.data.datasets = buildViewportDatasets(
           symbol,
           raw,
           fullSeries,
           indicatorsRef.current,
+          { min: targetMin, max: targetMax },
+          VIEW_MARGIN_BARS,
         ) as never;
-        const scales = createScales(interval, indicatorsRef.current);
-        chart.options.scales = scales as never;
         chart.update("none");
-
-        // ponytail: preserve visible candle count the user had before switching interval
-        if (userMoved && prevVisible > 0) {
-          const visibleCount = Math.min(prevVisible, raw.length);
-          const newMin = raw[raw.length - visibleCount]!.x;
-          const newMax = raw[raw.length - 1]!.x;
-          try {
-            chart.zoomScale("x", { min: newMin, max: newMax }, "none");
-          } catch {
-            /* ignore */
-          }
-        }
       } catch (err) {
         if (!cancelled)
           console.error("CandlestickChart interval update error:", err);
@@ -965,11 +1053,13 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
       Number.isFinite(oldMax);
 
     chart.options.scales = createScales(interval, indicators) as never;
-    chart.data.datasets = buildDatasets(
+    chart.data.datasets = buildViewportDatasets(
       symbol,
       rawData,
       fullSeries,
       indicators,
+      { min: oldMin as number, max: oldMax as number },
+      VIEW_MARGIN_BARS,
     ) as never;
     chart.update("none");
 
