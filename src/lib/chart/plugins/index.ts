@@ -44,6 +44,7 @@ const formatScaleValue = (scaleId: string, value: number) => {
   if (!Number.isFinite(value)) return '';
   if (scaleId === 'volume') return compactNumber(value);
   if (scaleId === 'stochRsi') return value.toFixed(1);
+  if (value < 1) return value.toFixed(6);
   return value >= 100 ? value.toFixed(2) : value.toFixed(4);
 };
 
@@ -303,8 +304,7 @@ export const currentPricePlugin = {
 
     const isUp = lastCandle?.c >= lastCandle?.o;
     const color = isUp ? CHART_THEME.up : CHART_THEME.down;
-    const label =
-      yValue! >= 100 ? yValue!.toFixed(2) : yValue!.toFixed(4);
+    const label = formatScaleValue('price', yValue as number);
     const ctx = chart.ctx;
 
     ctx.save();
@@ -669,13 +669,13 @@ export const fixedRangeVolumeProfilePlugin = {
 
 function formatProfilePrice(value: number) {
   if (!Number.isFinite(value)) return '-';
+  if (value < 1) return value.toFixed(6);
   if (value >= 1000)
     return value.toLocaleString('en-US', {
       maximumFractionDigits: 2,
     });
   if (value >= 100) return value.toFixed(2);
-  if (value >= 1) return value.toFixed(4);
-  return value.toPrecision(4);
+  return value.toFixed(4);
 }
 
 import { calculateVolumeProfile } from '@/lib/chart/indicators';
@@ -833,9 +833,9 @@ export const measureRangePlugin = {
 
 function formatMeasurePrice(value: number) {
   if (!Number.isFinite(value)) return '-';
+  if (value < 1) return value.toFixed(6);
   if (value >= 100) return value.toFixed(2);
-  if (value >= 1) return value.toFixed(4);
-  return value.toPrecision(4);
+  return value.toFixed(4);
 }
 
 export function createAdvancedTooltipPlugin() {
@@ -917,16 +917,16 @@ export function createAdvancedTooltipPlugin() {
       ctx.fillText(dateStr, tooltipX + 10, tooltipY + 10);
 
       const rows: [string, string, string?][] = [
-        ['O', candleData.o?.toFixed?.(4)],
-        ['H', candleData.h?.toFixed?.(4), CHART_THEME.up],
+        ['O', formatScaleValue('price', candleData.o)],
+        ['H', formatScaleValue('price', candleData.h), CHART_THEME.up],
         [
           'L',
-          candleData.l?.toFixed?.(4),
+          formatScaleValue('price', candleData.l),
           CHART_THEME.down,
         ],
         [
           'C',
-          candleData.c?.toFixed?.(4),
+          formatScaleValue('price', candleData.c),
           priceColor,
         ],
         [

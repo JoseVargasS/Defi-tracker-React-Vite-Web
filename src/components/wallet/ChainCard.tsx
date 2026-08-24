@@ -30,9 +30,11 @@ function renderRow(asset: WalletAsset) {
   const sym = asset.symbol?.toUpperCase() || 'TOKEN';
   const priceStr = asset.price == null
     ? '-'
-    : SPECIAL_SYMBOLS.includes(sym)
-      ? `$${Number(asset.price).toFixed(4)}`
-      : `$${Number(asset.price).toFixed(2)}`;
+    : Number(asset.price) < 1
+      ? `$${Number(asset.price).toFixed(6)}`
+      : SPECIAL_SYMBOLS.includes(sym)
+        ? `$${Number(asset.price).toFixed(4)}`
+        : `$${Number(asset.price).toFixed(2)}`;
   const amountStr = asset.amount == null
     ? '-'
     : sym === 'ETH' || sym === 'SOL'

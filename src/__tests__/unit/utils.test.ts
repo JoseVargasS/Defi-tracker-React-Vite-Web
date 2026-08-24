@@ -15,9 +15,9 @@ describe('formatPrice', () => {
     expect(formatPrice('not-a-number')).toBe('-');
   });
 
-  it('returns 4 decimals for values < 1', () => {
-    expect(formatPrice(0.12345)).toBe('0.1235');
-    expect(formatPrice('0.5')).toBe('0.5000');
+  it('returns 6 decimals for values < 1', () => {
+    expect(formatPrice(0.12345)).toBe('0.123450');
+    expect(formatPrice('0.5')).toBe('0.500000');
   });
 
   it('returns 2 decimals for values >= 1', () => {

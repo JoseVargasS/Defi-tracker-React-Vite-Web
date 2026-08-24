@@ -441,6 +441,12 @@ function createScales(interval: string, indicators: ChartIndicatorsState) {
         padding: 4,
         maxTicksLimit: 8,
         crossAlign: "far",
+        callback: (value: number) => {
+          // pares bajo 1 dolar muestran 6 decimales en el eje
+          if (value < 1) return value.toFixed(6);
+          if (value < 100) return value.toFixed(4);
+          return value.toFixed(2);
+        },
       },
       border: { color: CHART_THEME.border, display: false },
     },

@@ -72,12 +72,12 @@ describe('ChainCard', () => {
     expect(screen.getByText(/1\.123457/)).toBeTruthy();
   });
 
-  it('formats special symbols with 4 decimals for price', () => {
+  it('formats special symbols with 6 decimals for price under 1 dolar', () => {
     const assets = [makeAsset({ symbol: 'USUAL', price: 0.1234, amount: 100, total: 12.34 })];
     render(
       <ChainCard chainName="Ethereum" chainIcon="" chainTotal={12.34} assets={assets} />
     );
-    expect(screen.getByText('$0.1234')).toBeTruthy();
+    expect(screen.getByText('$0.123400')).toBeTruthy();
   });
 
   it('renders token element (icon or fallback)', () => {

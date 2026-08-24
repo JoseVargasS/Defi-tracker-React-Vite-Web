@@ -1,7 +1,7 @@
 export function formatPrice(price: number | string): string {
   const n = typeof price === 'string' ? parseFloat(price) : price;
   if (isNaN(n)) return '-';
-  return n < 1 ? n.toFixed(4) : n.toFixed(2);
+  return n < 1 ? n.toFixed(6) : n.toFixed(2);
 }
 
 export function escapeHTML(value: string | number | null | undefined): string {
