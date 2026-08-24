@@ -11,3 +11,4 @@ images/
 *.tsbuildinfo
 skills-lock.json
 .mimocode/
+.commandcode/

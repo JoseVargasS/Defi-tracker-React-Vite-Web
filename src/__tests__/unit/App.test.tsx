@@ -227,7 +227,7 @@ describe('App', () => {
   it('shows measure tool button', () => {
     useMarketStore.setState({ currentPair: 'BTCUSDT' });
     render(<App />);
-    expect(screen.getByText('%')).toBeTruthy();
+    expect(screen.getByLabelText('Medir rango de precio')).toBeTruthy();
   });
 
   it('shows color picker button', () => {
