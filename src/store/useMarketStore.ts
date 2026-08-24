@@ -30,7 +30,7 @@ export const DEFAULT_SMA_LINES: MaLineConfig[] = [
 
 export const DEFAULT_EMA_LINES: MaLineConfig[] = [
   { id: 'ema-9', period: 9, color: '#FF9800', enabled: false },
-  { id: 'ema-12', period: 12, color: '#2196F3', enabled: true },
+  { id: 'ema-12', period: 12, color: '#2196F3', enabled: false },
   { id: 'ema-25', period: 25, color: '#E91E63', enabled: false },
   { id: 'ema-50', period: 50, color: '#00BCD4', enabled: false },
   { id: 'ema-100', period: 100, color: '#FFEB3B', enabled: false },
@@ -78,13 +78,13 @@ export const useMarketStore = create<MarketState>((set) => ({
   currentPair: null,
   currentInterval: '1d',
   chartIndicators: {
-    bollinger: true,
+    bollinger: false,
     volume: true,
-    stochRsi: true,
-    volumeProfile: true,
+    stochRsi: false,
+    volumeProfile: false,
     smaLines: DEFAULT_SMA_LINES.map(l => ({ ...l })),
     emaLines: DEFAULT_EMA_LINES.map(l => ({ ...l })),
-    rsiEnabled: false,
+    rsiEnabled: true,
     rsiPeriod: 14,
     colors: { ...DEFAULT_INDICATOR_COLORS },
   },
