@@ -151,15 +151,15 @@ export const DEFAULT_TRACKED_PAIRS = [
 
 // === Theme tokens (mirrors CSS :root for the canvas) ===
 export const COLORS = {
-  bg: '#100e0c',
-  surface1: '#100e0c',
-  surface2: '#1a1815',
-  surface3: '#25221d',
-  border: '#2a2724',
+  bg: '#000000',
+  surface1: '#000000',
+  surface2: '#0e0e0e',
+  surface3: '#171717',
+  border: '#262626',
   ink1: '#f0eeeb',
   ink2: '#b8b4ad',
   ink3: '#7c7770',
-  ink4: '#4a4641',
+  ink4: '#4a4a4a',
   positive: '#00c087',
   positiveSoft: 'rgba(0, 192, 135, 0.16)',
   negative: '#f23645',

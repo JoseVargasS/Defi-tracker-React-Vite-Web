@@ -1,11 +1,11 @@
 :root {
   color-scheme: dark;
-  --bg: #100e0c;
-  --bg-grad-1: rgba(140, 110, 70, 0.06);
-  --surface-1: #100e0c;
-  --surface-2: #1a1815;
-  --surface-3: #25221d;
-  --border: #2a2724;
+  --bg: #000000;
+  --bg-grad-1: rgba(255, 255, 255, 0.03);
+  --surface-1: #000000;
+  --surface-2: #0e0e0e;
+  --surface-3: #171717;
+  --border: #262626;
   --border-soft: rgba(255, 255, 255, 0.07);
   --ink-1: #f0eeeb;
   --ink-2: #b8b4ad;

@@ -98,7 +98,7 @@ const drawValueChip = (
   // ponytail: anchor the chip to the canvas right edge so it never overflows the panel even when the right scale is narrow
   const x = chart.width - width - 2;
   ctx.save();
-  ctx.fillStyle = 'rgba(16, 14, 12, 0.92)';
+  ctx.fillStyle = 'rgba(10, 10, 10, 0.92)';
   ctx.strokeStyle = color;
   ctx.lineWidth = 1.4;
   ctx.beginPath();
@@ -645,7 +645,7 @@ export const fixedRangeVolumeProfilePlugin = {
     );
     const y = priceScale.top + 9;
 
-    ctx.fillStyle = 'rgba(16, 14, 12, 0.88)';
+    ctx.fillStyle = 'rgba(10, 10, 10, 0.88)';
     ctx.strokeStyle = 'rgba(242, 201, 76, 0.38)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -694,8 +694,8 @@ export const rightScaleBackgroundPlugin = {
     const baseStyle = ctx.fillStyle;
     const rightEdge = chart.width;
 
-    // ponytail: subtle vertical strip behind the right scale so prices read as a rail, not as canvas text
-    ctx.fillStyle = 'rgba(16, 14, 12, 0.65)';
+    // ponytail: strip vertical detras de la escala derecha en el color de fondo del chart
+    ctx.fillStyle = CHART_THEME.bg;
     if (volumeScale) {
       const y = priceScale.bottom;
       const h = volumeScale.bottom - y;
@@ -810,7 +810,7 @@ export const measureRangePlugin = {
       priceScale.bottom - 30,
     );
 
-    ctx.fillStyle = 'rgba(16, 14, 12, 0.92)';
+    ctx.fillStyle = 'rgba(10, 10, 10, 0.92)';
     ctx.strokeStyle = color;
     ctx.beginPath();
     if (ctx.roundRect)
@@ -889,7 +889,7 @@ export function createAdvancedTooltipPlugin() {
         : 0;
 
       ctx.save();
-      ctx.fillStyle = 'rgba(16, 14, 12, 0.88)';
+      ctx.fillStyle = 'rgba(10, 10, 10, 0.88)';
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
       ctx.lineWidth = 1;
       ctx.beginPath();
