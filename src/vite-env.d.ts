@@ -3,6 +3,8 @@
 
 interface ImportMetaEnv {
   readonly VITE_BINANCE_API?: string;
+  readonly VITE_BINANCE_FUTURES_API?: string;
+  readonly VITE_MEXC_FUTURES_API?: string;
   readonly VITE_COINSTATS_API?: string;
   readonly VITE_COINSTATS_API_KEY?: string;
   readonly VITE_ETH_API?: string;

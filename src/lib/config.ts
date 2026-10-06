@@ -4,9 +4,11 @@ export const BINANCE_API =
 export const BINANCE_FUTURES_API =
   import.meta.env.VITE_BINANCE_FUTURES_API || 'https://fapi.binance.com';
 // contract.mexc.com no manda CORS: en dev se proxyfea con Vite (/api/mexc)
-// y en prod con el worker de Cloudflare (VITE_MEXC_FUTURES_API lo pisa).
+// y en prod con el worker de Cloudflare (VITE_MEXC_FUTURES_API o VITE_AI_PROXY_URL + /mexc).
+const AI_PROXY_BASE = (import.meta.env.VITE_AI_PROXY_URL || '').replace(/\/$/, '');
 export const MEXC_FUTURES_API =
   import.meta.env.VITE_MEXC_FUTURES_API ||
+  (AI_PROXY_BASE ? `${AI_PROXY_BASE}/mexc` : null) ||
   (import.meta.env.DEV ? '/api/mexc' : 'https://contract.mexc.com/api/v1');
 export const COINSTATS_API =
   import.meta.env.VITE_COINSTATS_API || 'https://openapiv1.coinstats.app';

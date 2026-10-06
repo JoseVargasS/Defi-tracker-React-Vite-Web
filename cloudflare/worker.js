@@ -40,7 +40,9 @@ export default {
       return new Response('Origin no permitido', { status: 403 });
     }
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders(origin) });
+      const pathname = new URL(request.url).pathname;
+      const methods = pathname === '/mexc' || pathname.startsWith('/mexc/') ? 'GET, OPTIONS' : 'POST, OPTIONS';
+      return new Response(null, { status: 204, headers: corsHeaders(origin, methods) });
     }
     const pathname = new URL(request.url).pathname;
     if (pathname === '/mexc' || pathname.startsWith('/mexc/')) {
