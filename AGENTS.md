@@ -25,7 +25,7 @@ App React + Vite + TypeScript llamada **DeFi & Crypto Terminal**. Sirve para:
 npm run dev          # servidor dev Vite
 npm run build        # tsc -b && vite build
 npm run lint         # eslint src/
-npm run typecheck    # tsc --noEmit
+npm run typecheck    # tsc --noEmit -p tsconfig.app.json + tsconfig.node.json (el tsconfig raiz es solo references: sin -p no revisa nada)
 npm test             # vitest run
 npm run test:coverage # vitest run --coverage
 npm run test:e2e     # playwright test

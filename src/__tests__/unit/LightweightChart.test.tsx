@@ -318,10 +318,13 @@ describe('LightweightChart', () => {
     // Un solo cuadro en el eje (solo precio + contador); el nombre flota
     // sobre el grafico al final de la linea, sin repetir el precio.
     expect(screen.getByText('BTC/USDT')).toBeTruthy();
-    expect(screen.getByText('BTC/USDT')).toHaveStyle({ right: '64px' });
+    expect((screen.getByText('BTC/USDT') as HTMLElement).style.right).toBe('64px');
     expect(container.querySelector('.lw-price-tag-main')?.textContent).toBe('160.00');
     // Encuadrado al eje, pegado a la derecha.
-    expect(screen.getByLabelText(/cierra en/i)).toHaveStyle({ width: '60px', right: '0px' });
+    const closeTag = screen.getByLabelText(/cierra en/i) as HTMLElement;
+    expect(closeTag).toBeTruthy();
+    expect(closeTag.style.width).toBe('60px');
+    expect(closeTag.style.right).toBe('0px');
     // Contador apenitas apagado (0.9) frente al precio solido.
     const dim = container.querySelector('.lw-price-tag-countdown')?.getAttribute('style') ?? '';
     expect(dim).toContain('rgba(0, 192, 135, 0.9)');
@@ -422,7 +425,7 @@ describe('LightweightChart', () => {
     expect(leaders[0]?.getAttribute('stroke')).toBe('#00BCD4');
     expect(leaders[0]?.getAttribute('points')?.trim().split(/\s+/)).toHaveLength(3);
     // Texto y borde del color de la línea.
-    expect(screen.getByText('SMA5')).toHaveStyle({ color: 'rgb(0, 188, 212)' });
+    expect((screen.getByText('SMA5') as HTMLElement).style.color).toBe('rgb(0, 188, 212)');
     // Sin pisarse: gap vertical mínimo de tag + aire.
     const tops = [...container.querySelectorAll('.ma-tag')]
       .map((n) => parseFloat((n as HTMLElement).style.top))
@@ -462,7 +465,7 @@ describe('LightweightChart', () => {
     expect(htfCall).toBeTruthy();
     expect(htfCall?.[1]).not.toHaveProperty('lineStyle');
     // Tag y líder en hueso.
-    expect(screen.getByText('SMA5 5m')).toHaveStyle({ color: 'rgb(240, 238, 235)' });
+    expect((screen.getByText('SMA5 5m') as HTMLElement).style.color).toBe('rgb(240, 238, 235)');
     const leaders = container.querySelectorAll('.ma-leaders polyline');
     expect(leaders.length).toBe(1);
     expect(leaders[0]?.getAttribute('stroke')).toBe('#f0eeeb');
