@@ -3,22 +3,28 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PairSearch } from '@/components/market/PairSearch';
 import { useMarketStore } from '@/store/useMarketStore';
 
-vi.mock('@/api/binance', () => ({
-  fetchCoinsList: vi.fn().mockResolvedValue([
-    { symbol: 'BTCUSDT', base: 'BTC', quote: 'USDT', status: 'TRADING' },
-    { symbol: 'ETHUSDT', base: 'ETH', quote: 'USDT', status: 'TRADING' },
-    { symbol: 'BNBUSDT', base: 'BNB', quote: 'USDT', status: 'TRADING' },
-  ]),
-}));
+vi.mock('@/api/market', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('@/api/market')>();
+  return {
+    ...orig,
+    fetchAvailableSymbols: vi.fn().mockResolvedValue([
+      { symbol: 'BTCUSDT', base: 'BTC', quote: 'USDT', source: 'Binance', keywords: '', displayName: 'BTC/USDT' },
+      { symbol: 'ETHUSDT', base: 'ETH', quote: 'USDT', source: 'Binance', keywords: '', displayName: 'ETH/USDT' },
+      { symbol: 'BNBUSDT', base: 'BNB', quote: 'USDT', source: 'Binance', keywords: '', displayName: 'BNB/USDT' },
+    ]),
+  };
+});
+
+const coins = [
+  { symbol: 'BTCUSDT', base: 'BTC', quote: 'USDT', source: 'Binance', keywords: '', displayName: 'BTC/USDT' },
+  { symbol: 'ETHUSDT', base: 'ETH', quote: 'USDT', source: 'Binance', keywords: '', displayName: 'ETH/USDT' },
+  { symbol: 'BNBUSDT', base: 'BNB', quote: 'USDT', source: 'Binance', keywords: '', displayName: 'BNB/USDT' },
+];
 
 describe('PairSearch', () => {
   beforeEach(() => {
     useMarketStore.setState({
-      coinsList: [
-        { symbol: 'BTCUSDT', base: 'BTC', quote: 'USDT', status: 'TRADING' },
-        { symbol: 'ETHUSDT', base: 'ETH', quote: 'USDT', status: 'TRADING' },
-        { symbol: 'BNBUSDT', base: 'BNB', quote: 'USDT', status: 'TRADING' },
-      ],
+      coinsList: coins,
       tracked: [],
       currentPair: null,
     });
@@ -33,7 +39,7 @@ describe('PairSearch', () => {
     render(<PairSearch />);
     const input = screen.getByPlaceholderText('Buscar par...');
     fireEvent.change(input, { target: { value: 'BTC' } });
-    expect(screen.getByText('BTC/USDT')).toBeTruthy();
+    expect(screen.getByText('BTC/USDT', { exact: false })).toBeTruthy();
   });
 
   it('shows no results message for unmatched query', () => {
@@ -47,7 +53,7 @@ describe('PairSearch', () => {
     render(<PairSearch />);
     const input = screen.getByPlaceholderText('Buscar par...') as HTMLInputElement;
     fireEvent.change(input, { target: { value: 'BTC' } });
-    fireEvent.click(screen.getByText('BTC/USDT'));
+    fireEvent.click(screen.getByText('BTC/USDT', { exact: false }));
     expect(input.value).toBe('');
   });
 
@@ -55,7 +61,7 @@ describe('PairSearch', () => {
     render(<PairSearch />);
     const input = screen.getByPlaceholderText('Buscar par...');
     fireEvent.change(input, { target: { value: 'ETHUSDT' } });
-    expect(screen.getByText('ETH/USDT')).toBeTruthy();
+    expect(screen.getByText('ETH/USDT', { exact: false })).toBeTruthy();
   });
 
   it('loads coins list on mount if empty', async () => {
@@ -70,8 +76,29 @@ describe('PairSearch', () => {
     render(<PairSearch />);
     const input = screen.getByPlaceholderText('Buscar par...');
     fireEvent.change(input, { target: { value: 'BTC' } });
-    expect(screen.getByText('BTC/USDT')).toBeTruthy();
+    expect(screen.getByText('BTC/USDT', { exact: false })).toBeTruthy();
     fireEvent.change(input, { target: { value: '' } });
-    expect(screen.queryByText('BTC/USDT')).toBeNull();
+    expect(screen.queryByText('BTC/USDT', { exact: false })).toBeNull();
+  });
+
+  it('shows source label on suggestions', () => {
+    render(<PairSearch />);
+    const input = screen.getByPlaceholderText('Buscar par...');
+    fireEvent.change(input, { target: { value: 'BTC' } });
+    expect(screen.getByText(/Binance · Spot/)).toBeTruthy();
+  });
+
+  it('groups results with headers', () => {
+    useMarketStore.setState({
+      coinsList: [
+        ...coins,
+        { symbol: 'BTC_USDT', base: 'BTC', quote: 'USDT', source: 'MEXC', keywords: '', displayName: 'BTC/USDT' },
+      ],
+    });
+    render(<PairSearch />);
+    const input = screen.getByPlaceholderText('Buscar par...');
+    fireEvent.change(input, { target: { value: 'BTC' } });
+    expect(screen.getByText('Futuros perpetuos')).toBeTruthy();
+    expect(screen.getByText('Spot')).toBeTruthy();
   });
 });

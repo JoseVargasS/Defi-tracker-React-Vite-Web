@@ -1,10 +1,8 @@
 import { useState } from 'react';
 import { ZeroValueToggle } from './ZeroValueToggle';
 import type { WalletAsset } from '@/store/useWalletStore';
-import { safeImageUrl } from '@/lib/utils';
+import { formatPrice, safeImageUrl } from '@/lib/utils';
 import { tokenIconUrl } from '@/lib/assets';
-
-const SPECIAL_SYMBOLS = ['USUAL', 'USUALX', 'USD0', 'BIO'];
 
 function TokenIcon({ symbol, imgUrl }: { symbol: string; imgUrl: string }) {
   const [hasError, setHasError] = useState(false);
@@ -28,13 +26,7 @@ function TokenIcon({ symbol, imgUrl }: { symbol: string; imgUrl: string }) {
 
 function renderRow(asset: WalletAsset) {
   const sym = asset.symbol?.toUpperCase() || 'TOKEN';
-  const priceStr = asset.price == null
-    ? '-'
-    : Number(asset.price) < 1
-      ? `$${Number(asset.price).toFixed(6)}`
-      : SPECIAL_SYMBOLS.includes(sym)
-        ? `$${Number(asset.price).toFixed(4)}`
-        : `$${Number(asset.price).toFixed(2)}`;
+  const priceStr = asset.price == null ? '-' : `$${formatPrice(asset.price)}`;
   const amountStr = asset.amount == null
     ? '-'
     : sym === 'ETH' || sym === 'SOL'

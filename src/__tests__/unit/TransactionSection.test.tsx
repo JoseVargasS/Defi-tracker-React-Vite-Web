@@ -4,17 +4,35 @@ import TransactionSection from '@/components/transactions/TransactionSection';
 import { useWalletStore } from '@/store/useWalletStore';
 
 vi.mock('@/api/etherscan', () => ({
-  fetchEtherscanTransactions: vi.fn().mockResolvedValue([
-    { hash: '0x111', timeStamp: '1700000000', tokenSymbol: 'ETH', value: '1000000000000000000', from: '0xaaa', to: '0xbbb', tokenDecimal: '18', tokenName: 'Ethereum' },
-    { hash: '0x222', timeStamp: '1700001000', tokenSymbol: 'USDC', value: '5000000', from: '0xbbb', to: '0xaaa', tokenDecimal: '6', tokenName: 'USD Coin' },
-  ]),
+  fetchEtherscanTransactions: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('@/api/coinstats', () => ({
-  fetchBaseTransactions: vi.fn().mockResolvedValue([
-    { txHash: '0x333', timestamp: '1700002000', symbol: 'ETH', amount: '2000000000000000000', from: '0xccc', to: '0xddd', tokenDecimal: '18', tokenName: 'Ethereum' },
-  ]),
+  coinStatsTxError: vi.fn().mockReturnValue(null),
+  fetchChainTransactions: vi.fn(async (_address: string, connectionId: string) => {
+    if (connectionId === 'ethereum') {
+      return [
+        { hash: '0x111', timeStamp: 1700000000, tokenSymbol: 'ETH', value: 1, from: '0xaaa', to: '0xbbb', tokenDecimal: '0', tokenName: 'Ethereum', imgUrl: null, _chainId: 'Ethereum' },
+        { hash: '0x222', timeStamp: 1700001000, tokenSymbol: 'USDC', value: 5, from: '0xbbb', to: '0xaaa', tokenDecimal: '0', tokenName: 'USD Coin', imgUrl: null, _chainId: 'Ethereum' },
+      ];
+    }
+    if (connectionId === 'base-wallet') {
+      return [
+        { hash: '0x333', timeStamp: 1700002000, symbol: undefined, tokenSymbol: 'ETH', value: 2, from: '0xccc', to: '0xddd', tokenDecimal: '0', tokenName: 'Ethereum', imgUrl: null, _chainId: 'Base' },
+      ];
+    }
+    return [];
+  }),
 }));
+
+vi.mock('@/lib/config', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('@/lib/config')>();
+  return {
+    ...orig,
+    HAS_COINSTATS_CONFIG: true,
+    TRANSACTION_CHAIN_DELAY_MS: 0,
+  };
+});
 
 vi.mock('@/components/transactions/TransactionTable', () => ({
   default: ({ title, txs, loading, hasMore, onLoadMore }: { title: string; txs: unknown[]; loading: boolean; hasMore: boolean; onLoadMore: () => void }) => (
@@ -29,32 +47,32 @@ vi.mock('@/components/transactions/TransactionTable', () => ({
 
 describe('TransactionSection', () => {
   beforeEach(() => {
-    useWalletStore.setState({ address: '' });
+    useWalletStore.setState({ address: '0x' + 'a'.repeat(40) });
   });
 
-  it('renders both chain tables', () => {
+  it('renders one table per chain with data', async () => {
     render(<TransactionSection />);
-    expect(screen.getByTestId('table-Ethereum')).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByTestId('table-Ethereum')).toBeTruthy();
+    });
     expect(screen.getByTestId('table-Base')).toBeTruthy();
   });
 
-  it('does not fetch when no address', () => {
-    render(<TransactionSection />);
-    const idles = screen.getAllByText('idle');
-    expect(idles.length).toBe(2);
-  });
-
-  it('fetches transactions when address is set', async () => {
-    useWalletStore.setState({ address: '0x' + 'a'.repeat(40) });
+  it('shows header counts', async () => {
     render(<TransactionSection />);
     await waitFor(() => {
-      expect(screen.getByText(/2 txs/)).toBeTruthy();
+      expect(screen.getByText(/3 txs · 2 networks/)).toBeTruthy();
     });
   });
 
-  it('displays chain names', () => {
+  it('skips empty chains once loaded', async () => {
     render(<TransactionSection />);
-    expect(screen.getByText('Ethereum')).toBeTruthy();
-    expect(screen.getByText('Base')).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByText(/3 txs · 2 networks/)).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(screen.queryByText('loading')).toBeNull();
+    });
+    expect(screen.queryByTestId('table-Solana')).toBeNull();
   });
 });

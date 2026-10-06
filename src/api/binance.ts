@@ -5,6 +5,7 @@ import {
   DEFAULT_CHART_BAR_COUNT,
   MAX_CHART_BAR_COUNT,
   binanceInterval,
+  chartPageCountForInterval,
   intervalAggregate,
 } from '@/lib/config';
 import { STORAGE_KEYS } from '@/lib/storage';
@@ -167,8 +168,11 @@ export async function fetchKlines(symbol: string, interval: string, limit?: numb
     const klines: unknown[][] = [];
     let endTime: number | undefined;
     let remaining = totalLimit;
+    // Port Android: 3 paginas en TFs chicos, 2 en medios, 1 en el resto.
+    const maxPages = chartPageCountForInterval(interval);
+    let pagesFetched = 0;
 
-    while (remaining > 0) {
+    while (remaining > 0 && pagesFetched < maxPages) {
       const batch = Math.min(BINANCE_KLINES_MAX, remaining);
       const url = `${BINANCE_API}/klines?symbol=${symbol}&interval=${qInterval}&limit=${batch}${endTime ? `&endTime=${endTime}` : ''}`;
       const res = await makeRequest(url) as unknown[][];
@@ -176,6 +180,7 @@ export async function fetchKlines(symbol: string, interval: string, limit?: numb
       klines.unshift(...res);
       endTime = Number(res[0][0]) - 1;
       remaining -= res.length;
+      pagesFetched++;
       if (res.length < batch) break;
     }
 
@@ -188,6 +193,34 @@ export async function fetchKlines(symbol: string, interval: string, limit?: numb
     console.error('fetchKlines error', err);
     return [];
   }
+}
+
+function closesOf(rows: unknown[], limit: number): number[] {
+  const closes: number[] = [];
+  for (const row of rows) {
+    const arr = row as unknown[];
+    const close = Number(arr?.[4] ?? NaN);
+    if (Number.isFinite(close)) closes.push(close);
+  }
+  return closes.slice(-limit);
+}
+
+// Sparkline liviana: ultimos cierres 1h en 1 sola llamada (port Android).
+export async function getSparklineCloses(symbol: string, limit = 30): Promise<number[]> {
+  const cleanLimit = Math.min(Math.max(limit, 2), 100);
+  const rows = await fetchLatestKlines(symbol, '1h', cleanLimit);
+  if (rows.length >= 2) return closesOf(rows, cleanLimit);
+  return closesOf(await fetchKlines(symbol, '1h', cleanLimit), cleanLimit);
+}
+
+// Cierres recientes de cualquier TF en 1 sola llamada (para medias lejanas).
+export async function getRecentCloses(
+  symbol: string,
+  interval: string,
+  limit = 260,
+): Promise<number[]> {
+  const cleanLimit = Math.min(Math.max(limit, 2), 1000);
+  return closesOf(await fetchKlines(symbol, interval, cleanLimit), cleanLimit);
 }
 
 /**

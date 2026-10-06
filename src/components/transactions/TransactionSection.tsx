@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback } from 'react'
 import TransactionTable from './TransactionTable'
 import type { TransactionEntry } from '@/store/useTransactionStore'
 import { fetchEtherscanTransactions } from '@/api/etherscan'
-import { fetchBaseTransactions } from '@/api/coinstats'
+import { coinStatsTxError, fetchChainTransactions } from '@/api/coinstats'
 import { useWalletStore } from '@/store/useWalletStore'
-import { integerAmountToNumber } from '@/lib/utils'
+import { integerAmountToNumber, safeErrorMessage } from '@/lib/utils'
+import { HAS_COINSTATS_CONFIG, TRANSACTION_CHAINS, TRANSACTION_CHAIN_DELAY_MS } from '@/lib/config'
 
 const TX_PAGE_SIZE = 10
 
@@ -73,65 +74,84 @@ function deduplicate(entries: TransactionEntry[]): TransactionEntry[] {
 
 export default function TransactionSection() {
   const address = useWalletStore((s) => s.address)
-  const [eth, setEth] = useState<ChainState>({ all: [], offset: 0, loading: false })
-  const [base, setBase] = useState<ChainState>({ all: [], offset: 0, loading: false })
+  const [chains, setChains] = useState<Record<string, ChainState>>({})
+  const [error, setError] = useState<string | null>(null)
 
-  const fetchEth = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
     if (!address) return
-    setEth(prev => ({ ...prev, loading: true }))
-    try {
-      const raw = await fetchEtherscanTransactions(address, 1)
-      const normalized = raw.map(tx => normalizeEntry(tx as RawTransaction, address))
-      setEth({ all: deduplicate(normalized), offset: 0, loading: false })
-    } catch {
-      setEth(prev => ({ ...prev, loading: false }))
-    }
-  }, [address])
-
-  const fetchBase = useCallback(async () => {
-    if (!address) return
-    setBase(prev => ({ ...prev, loading: true }))
-    try {
-      const raw = await fetchBaseTransactions(address)
-      const normalized = raw.map(tx => normalizeEntry(tx as RawTransaction, address))
-      setBase({ all: deduplicate(normalized), offset: 0, loading: false })
-    } catch {
-      setBase(prev => ({ ...prev, loading: false }))
+    setError(null)
+    setChains(Object.fromEntries(
+      TRANSACTION_CHAINS.map((c) => [c.id, { all: [], offset: 0, loading: true }]),
+    ))
+    // Secuencial con delay como la app (evita 429 de CoinStats).
+    const next: Record<string, ChainState> = {}
+    for (let i = 0; i < TRANSACTION_CHAINS.length; i++) {
+      if (i > 0) await new Promise((r) => setTimeout(r, TRANSACTION_CHAIN_DELAY_MS));
+      const chain = TRANSACTION_CHAINS[i]!
+      try {
+        let raw: unknown[] = []
+        if (HAS_COINSTATS_CONFIG) {
+          raw = await fetchChainTransactions(address, chain.id, chain.name, 100)
+        } else if (chain.id === 'ethereum') {
+          raw = await fetchEtherscanTransactions(address, 1)
+        }
+        const normalized = (raw as RawTransaction[]).map((tx) => normalizeEntry(tx, address))
+        next[chain.id] = { all: deduplicate(normalized), offset: 0, loading: false }
+      } catch (err) {
+        const visible = coinStatsTxError(err)
+        if (visible) {
+          setError(visible.message)
+          setChains(Object.fromEntries(
+            TRANSACTION_CHAINS.map((c) => [c.id, { all: [], offset: 0, loading: false }]),
+          ))
+          return
+        }
+        console.warn(`tx fetch failed for ${chain.name}:`, safeErrorMessage(err))
+        next[chain.id] = { all: [], offset: 0, loading: false }
+      }
+      setChains((prev) => ({ ...prev, [chain.id]: next[chain.id]! }))
     }
   }, [address])
 
   useEffect(() => {
-    fetchEth()
-    fetchBase()
-  }, [fetchEth, fetchBase])
+    fetchAll()
+  }, [fetchAll])
 
-  const loadMoreEth = useCallback(() => {
-    setEth(prev => ({ ...prev, offset: prev.offset + TX_PAGE_SIZE }))
+  const loadMore = useCallback((chainId: string) => {
+    setChains((prev) => {
+      const cur = prev[chainId]
+      if (!cur) return prev
+      return { ...prev, [chainId]: { ...cur, offset: cur.offset + TX_PAGE_SIZE } }
+    })
   }, [])
 
-  const loadMoreBase = useCallback(() => {
-    setBase(prev => ({ ...prev, offset: prev.offset + TX_PAGE_SIZE }))
-  }, [])
-
-  const visibleEth = eth.all.slice(0, eth.offset + TX_PAGE_SIZE)
-  const visibleBase = base.all.slice(0, base.offset + TX_PAGE_SIZE)
+  const totalTxs = Object.values(chains).reduce((acc, c) => acc + c.all.length, 0)
+  const networks = Object.values(chains).filter((c) => c.all.length > 0).length
 
   return (
     <div className="transactions-container">
-      <TransactionTable
-        title="Ethereum"
-        txs={visibleEth}
-        loading={eth.loading}
-        hasMore={eth.offset + TX_PAGE_SIZE < eth.all.length}
-        onLoadMore={loadMoreEth}
-      />
-      <TransactionTable
-        title="Base"
-        txs={visibleBase}
-        loading={base.loading}
-        hasMore={base.offset + TX_PAGE_SIZE < base.all.length}
-        onLoadMore={loadMoreBase}
-      />
+      <div className="transactions-header">
+        <span>{totalTxs} txs · {networks} networks</span>
+        <button type="button" className="btn-refresh" onClick={fetchAll} disabled={!address}>
+          Actualizar
+        </button>
+      </div>
+      {error && <div className="wallet-error">{error}</div>}
+      {TRANSACTION_CHAINS.map((chain) => {
+        const state = chains[chain.id] ?? { all: [], offset: 0, loading: false }
+        const visible = state.all.slice(0, state.offset + TX_PAGE_SIZE)
+        if (!state.loading && visible.length === 0) return null
+        return (
+          <TransactionTable
+            key={chain.id}
+            title={chain.name}
+            txs={visible}
+            loading={state.loading}
+            hasMore={state.offset + TX_PAGE_SIZE < state.all.length}
+            onLoadMore={() => loadMore(chain.id)}
+          />
+        )
+      })}
     </div>
   )
 }

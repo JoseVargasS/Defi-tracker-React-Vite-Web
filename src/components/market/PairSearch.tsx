@@ -1,16 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { fetchCoinsList, CoinInfo as Coin } from '@/api/binance';
+import { fetchAvailableSymbols, filterAvailableSymbolsGrouped, trackedEntryFor, type AvailableSymbol, type SymbolGroup } from '@/api/market';
+import { sourceLabel } from '@/lib/config';
 import { useMarketStore } from '@/store/useMarketStore';
-
-const pairLabel = (coin: Coin) => `${coin.base}/${coin.quote}`;
-const pairSearchText = (coin: Coin) =>
-  `${coin.symbol} ${coin.base} ${coin.quote} ${pairLabel(coin)}`;
-const coinMatches = (coin: Coin, upper: string, normalized: string) =>
-  pairSearchText(coin).includes(upper) || coin.symbol.includes(normalized);
 
 export function PairSearch() {
   const [query, setQuery] = useState('');
-  const [suggestions, setSuggestions] = useState<Coin[]>([]);
+  const [groups, setGroups] = useState<SymbolGroup[]>([]);
   const [show, setShow] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const addTracked = useMarketStore((s) => s.addTracked);
@@ -20,7 +15,7 @@ export function PairSearch() {
 
   useEffect(() => {
     if (coinsList.length) return;
-    fetchCoinsList().then((data) => {
+    fetchAvailableSymbols().then((data) => {
       if (data && data.length) {
         setCoinsList(data);
       }
@@ -32,32 +27,23 @@ export function PairSearch() {
       const q = e.target.value;
       setQuery(q);
       if (!q.trim()) {
-        setSuggestions([]);
+        setGroups([]);
         setShow(false);
         return;
       }
-      const upper = q.trim().toUpperCase();
-      const normalized = upper.replace(/[^A-Z0-9]/g, '');
-      const coins = coinsList as Coin[];
-      const matches: Coin[] = [];
-      for (let i = 0; i < coins.length && matches.length < 10; i++) {
-        const c = coins[i];
-        if (coinMatches(c, upper, normalized)) {
-          matches.push(c);
-        }
-      }
-      setSuggestions(matches);
+      setGroups(filterAvailableSymbolsGrouped(coinsList as AvailableSymbol[], q, 7));
       setShow(true);
     },
     [coinsList],
   );
 
   const handleSelect = useCallback(
-    (coin: Coin) => {
-      addTracked(coin.symbol);
-      setCurrentPair(coin.symbol);
+    (coin: AvailableSymbol) => {
+      const entry = trackedEntryFor(coin.symbol, coin.source);
+      addTracked(entry);
+      setCurrentPair(entry);
       setQuery('');
-      setSuggestions([]);
+      setGroups([]);
       setShow(false);
     },
     [addTracked, setCurrentPair],
@@ -73,6 +59,8 @@ export function PairSearch() {
     return () => document.removeEventListener('click', handler);
   }, []);
 
+  const total = groups.reduce((acc, g) => acc + g.items.length, 0);
+
   return (
     <div id="pair-form" ref={containerRef}>
       <input
@@ -83,18 +71,24 @@ export function PairSearch() {
         onChange={handleInput}
         autoComplete="off"
       />
-      <div id="pair-suggestions" className={show && suggestions.length ? 'active' : ''}>
-        {suggestions.length === 0 && query.trim() ? (
+      <div id="pair-suggestions" className={show && total ? 'active' : ''}>
+        {total === 0 && query.trim() ? (
           <div>No se encontraron pares.</div>
         ) : (
-          suggestions.map((coin) => (
-            <button
-              type="button"
-              key={coin.symbol}
-              onClick={() => handleSelect(coin)}
-            >
-              {pairLabel(coin)}
-            </button>
+          groups.map((group) => (
+            <div key={group.source} className="pair-suggest-group">
+              <div className="pair-suggest-title">{group.title}</div>
+              {group.items.map((coin) => (
+                <button
+                  type="button"
+                  key={`${coin.symbol}-${coin.source}`}
+                  onClick={() => handleSelect(coin)}
+                >
+                  {coin.displayName}
+                  <span className="coin-symbol-suffix"> · {sourceLabel(coin.source)}</span>
+                </button>
+              ))}
+            </div>
           ))
         )}
       </div>

@@ -3,9 +3,13 @@ import { describe, it, expect, vi } from 'vitest';
 import { ChainCard } from '@/components/wallet/ChainCard';
 import type { WalletAsset } from '@/store/useWalletStore';
 
-vi.mock('@/lib/utils', () => ({
-  safeImageUrl: (url: string) => url || '',
-}));
+vi.mock('@/lib/utils', async (importOriginal) => {
+  const orig = await importOriginal<typeof import('@/lib/utils')>();
+  return {
+    ...orig,
+    safeImageUrl: (url: string) => url || '',
+  };
+});
 
 vi.mock('@/lib/assets', () => ({
   tokenIconUrl: (symbol: string) => `https://icon.test/${symbol}.png`,
@@ -78,6 +82,14 @@ describe('ChainCard', () => {
       <ChainCard chainName="Ethereum" chainIcon="" chainTotal={12.34} assets={assets} />
     );
     expect(screen.getByText('$0.123400')).toBeTruthy();
+  });
+
+  it('formats prices in 1-10 with 4 decimals like the app', () => {
+    const assets = [makeAsset({ symbol: 'BNB', price: 5.5, amount: 10, total: 55 })];
+    render(
+      <ChainCard chainName="Ethereum" chainIcon="" chainTotal={55} assets={assets} />
+    );
+    expect(screen.getByText('$5.5000')).toBeTruthy();
   });
 
   it('renders token element (icon or fallback)', () => {

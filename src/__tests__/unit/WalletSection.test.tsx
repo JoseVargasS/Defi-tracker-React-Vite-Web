@@ -19,7 +19,8 @@ vi.mock('@/lib/config', () => ({
   CHAIN_FALLBACKS: {},
   STABLE_PRICES: { USDT: 1, USDC: 1, USD0: 1, DAI: 1 },
   SUPPORTED_CHAINS: [{ id: 'ethereum', name: 'Ethereum', icon: '' }],
-  WALLET_BALANCE_CONCURRENCY: 3,
+  WALLET_CHAIN_DELAY_MS: 0,
+  BALANCE_DUST_THRESHOLD: 0.0001,
 }));
 
 vi.mock('@/lib/assets', () => ({
