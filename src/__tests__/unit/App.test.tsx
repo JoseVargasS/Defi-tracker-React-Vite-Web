@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import App from '@/App';
+import { fetchPairDetail } from '@/api/market';
 import { useMarketStore } from '@/store/useMarketStore';
 import { useWalletStore } from '@/store/useWalletStore';
 
@@ -10,8 +11,28 @@ vi.mock('@/api/binance', () => ({
 
 vi.mock('@/api/market', () => ({
   fetchPairDetail: vi.fn().mockResolvedValue(null),
-  displayBase: (entry: string) => String(entry || '').replace(/USDT$/, ''),
-  displayQuote: () => '',
+  displayBase: (entry: string) => {
+    const upper = String(entry || '').toUpperCase();
+    const dash = upper.lastIndexOf('-');
+    const sym = dash > 0 ? upper.slice(0, dash) : upper;
+    if (sym.includes('_')) return sym.split('_')[0] || sym;
+    return sym.replace(/USDT$/, '');
+  },
+  displayQuote: (entry: string) => {
+    const upper = String(entry || '').toUpperCase();
+    const dash = upper.lastIndexOf('-');
+    const sym = dash > 0 ? upper.slice(0, dash) : upper;
+    if (sym.includes('_')) return sym.split('_')[1] || '';
+    return /USDT$/.test(sym) ? 'USDT' : '';
+  },
+  displayPairLabel: (entry: string) => {
+    const upper = String(entry || '').toUpperCase();
+    const dash = upper.lastIndexOf('-');
+    const sym = dash > 0 ? upper.slice(0, dash) : upper;
+    if (sym.includes('_')) return sym.replace(/_/g, '');
+    if (/USDT$/.test(sym)) return `${sym.replace(/USDT$/, '')}/USDT`;
+    return sym;
+  },
 }));
 
 vi.mock('@/lib/storage', () => ({
@@ -121,6 +142,7 @@ describe('App', () => {
         drawTool: null,
       },
       lastPrices: {},
+      liveQuotes: {},
       coinsList: [],
     });
     useWalletStore.setState({
@@ -305,5 +327,65 @@ describe('App', () => {
     expect(screen.getByText('Pro')).toBeTruthy();
     expect(screen.getByText('Chart.js')).toBeTruthy();
     expect(screen.getByText('TradingView')).toBeTruthy();
+  });
+
+  it('shows MEXC futures header with ticker, source badge and detail price fallback', async () => {
+    vi.mocked(fetchPairDetail).mockResolvedValue({
+      symbol: 'SUI_USDT', price: 1.2321, priceChange: 0.0006, priceChangePercent: 0.05,
+      highPrice: 1.232, lowPrice: 1.177, volume: 80600000, quoteVolume: 99600000,
+      isPositive: true, source: 'MEXC',
+    });
+    useMarketStore.setState({ currentPair: 'SUI_USDT-MEXC', lastPrices: {} });
+    const { container } = render(<App />);
+    expect(await screen.findByText('SUIUSDT')).toBeTruthy();
+    expect(await screen.findByText('1.2321')).toBeTruthy();
+    expect(screen.getByText('MEXC · Futuros')).toBeTruthy();
+    expect(container.querySelector('#pair-price strong')?.textContent).toBe('1.2321');
+    const stats = container.querySelector('.pair-stats')?.textContent ?? '';
+    expect(stats).toContain('+0.0006');
+    expect(stats).toContain('1.232');
+    expect(stats).not.toContain('1,232');
+    expect(document.title).toBe('SUIUSDT 1.2321 ▲ +0.05%');
+  });
+
+  it('shows spot header with ticker, source badge and grouped max', async () => {
+    vi.mocked(fetchPairDetail).mockResolvedValue({
+      symbol: 'BTCUSDT', price: 65000, priceChange: 1250.5, priceChangePercent: 1.96,
+      highPrice: 66000, lowPrice: 63000, volume: 1000, quoteVolume: 65000000,
+      isPositive: true, source: 'Binance',
+    });
+    useMarketStore.setState({ currentPair: 'BTCUSDT', lastPrices: {} });
+    const { container } = render(<App />);
+    expect(await screen.findByText('BTC/USDT')).toBeTruthy();
+    expect(screen.getByText('Binance · Spot')).toBeTruthy();
+    expect(container.querySelector('#pair-price strong')?.textContent).toBe('65000.00');
+    expect(container.querySelector('.pair-stats')?.textContent).toContain('66,000.00');
+  });
+
+  it('prefers live lastPrices over detail price in header', async () => {
+    vi.mocked(fetchPairDetail).mockResolvedValue({
+      symbol: 'SUI_USDT', price: 1.2321, priceChange: 0.0006, priceChangePercent: 0.05,
+      highPrice: 1.232, lowPrice: 1.177, volume: 80600000, quoteVolume: 99600000,
+      isPositive: true, source: 'MEXC',
+    });
+    useMarketStore.setState({ currentPair: 'SUI_USDT-MEXC', lastPrices: { 'SUI_USDT-MEXC': 1.25 } });
+    const { container } = render(<App />);
+    expect(await screen.findByText('SUIUSDT')).toBeTruthy();
+    expect(container.querySelector('#pair-price strong')?.textContent).toBe('1.2500');
+  });
+
+  it('updates header price and pct from live quotes', async () => {
+    vi.mocked(fetchPairDetail).mockResolvedValue(null);
+    useMarketStore.setState({
+      currentPair: 'SUI_USDT-MEXC',
+      lastPrices: {},
+      liveQuotes: { 'SUI_USDT-MEXC': { price: 1.19, changePercent: -0.29, isPositive: false, quoteVolume: 90900000 } },
+    });
+    const { container } = render(<App />);
+    expect(await screen.findByText('SUIUSDT')).toBeTruthy();
+    expect(await screen.findByText('1.1900')).toBeTruthy();
+    expect(container.querySelector('#pair-price strong')?.textContent).toBe('1.1900');
+    expect(container.querySelector('#pair-price')?.textContent).toContain('-0.29%');
+    expect(document.title).toBe('SUIUSDT 1.1900 ▼ -0.29%');
   });
 });

@@ -13,18 +13,27 @@ import { WalletSection } from '@/components/wallet/WalletSection';
 import TransactionSection from '@/components/transactions/TransactionSection';
 import { migrateAppStorage, readTrackedPairs, writeTrackedPairs, readIndicatorColors, writeIndicatorColors, readSmaLines, writeSmaLines, readEmaLines, writeEmaLines } from '@/lib/storage';
 import { useMarketStore } from '@/store/useMarketStore';
-import { fetchPairDetail, displayBase } from '@/api/market';
-import { formatPrice, formatTitlePrice } from '@/lib/utils';
+import { fetchPairDetail, displayPairLabel } from '@/api/market';
+import { formatPrice } from '@/lib/utils';
 import { compactNumber } from '@/lib/chart/normalize';
-import { APP_NAME } from '@/lib/config';
+import { formatPriceForChart } from '@/lib/chart/priceFormat';
+import { APP_NAME, pairKey, parseTrackedPair, sourceLabel, type PairSource } from '@/lib/config';
 
 interface Stats24h {
+  price: number | null;
   priceChange: string;
   priceChangePercent: string;
   highPrice: number;
   lowPrice: number;
   volume: number;
   quoteVolume: number;
+}
+
+// Ticker para mostrar según fuente: spot con slash (BTC/USDT),
+// perpetuos estilo exchange sin slash (SUIUSDT) + badge de fuente.
+function headerLabel(entry: string): { label: string; source: PairSource } {
+  const { source } = parseTrackedPair(entry);
+  return { label: displayPairLabel(entry), source };
 }
 
 export default function App() {
@@ -41,6 +50,15 @@ export default function App() {
   const [chartResetSignal, setChartResetSignal] = useState(0);
   const [measureActive, setMeasureActive] = useState(false);
   const chartRef = useRef<ChartHandle>(null);
+  const title = headerLabel(currentPair ?? '');
+  // En vivo manda el socket; lastPrices solo lo alimenta spot; el detail es el piso.
+  const liveQuote = useMarketStore((s) => {
+    if (!currentPair) return undefined;
+    const { symbol, source } = parseTrackedPair(currentPair);
+    return s.liveQuotes[pairKey(symbol, source)];
+  });
+  const headerPrice = liveQuote?.price ?? (currentPair ? lastPrices[currentPair] : undefined) ?? stats24h?.price ?? null;
+  const headerPct = liveQuote?.changePercent ?? (stats24h ? parseFloat(stats24h.priceChangePercent) : NaN);
 
   useEffect(() => {
     if (!currentPair) { setStats24h(null); return; }
@@ -49,7 +67,7 @@ export default function App() {
       const res = await fetchPairDetail(currentPair);
       if (cancelled || !res) return;
       setStats24h({
-        priceChange: String(res.priceChange ?? '0'),
+        price: Number.isFinite(res.price) ? res.price : null,        priceChange: String(res.priceChange ?? '0'),
         priceChangePercent: String(res.priceChangePercent ?? '0'),
         highPrice: Number(res.highPrice ?? 0),
         lowPrice: Number(res.lowPrice ?? 0),
@@ -65,18 +83,16 @@ export default function App() {
       document.title = APP_NAME;
       return;
     }
-    const base = displayBase(currentPair);
-    const price = lastPrices[currentPair];
-    const pct = stats24h ? parseFloat(stats24h.priceChangePercent) : NaN;
-    if (price == null || !Number.isFinite(price)) {
-      document.title = `${base} | ${APP_NAME}`;
+    const { label } = headerLabel(currentPair);
+    if (headerPrice == null || !Number.isFinite(headerPrice)) {
+      document.title = `${label} | ${APP_NAME}`;
       return;
     }
-    const arrow = Number.isFinite(pct) ? (pct >= 0 ? '\u25B2' : '\u25BC') : '';
-    const sign = Number.isFinite(pct) ? (pct >= 0 ? '+' : '') : '';
-    const pctText = Number.isFinite(pct) ? `${sign}${pct.toFixed(2)}%` : '';
-    document.title = `${base} ${formatTitlePrice(price)}${arrow ? ' ' + arrow : ''}${pctText ? ' ' + pctText : ''}`;
-  }, [currentPair, lastPrices, stats24h]);
+    const arrow = Number.isFinite(headerPct) ? (headerPct >= 0 ? '\u25B2' : '\u25BC') : '';
+    const sign = Number.isFinite(headerPct) ? (headerPct >= 0 ? '+' : '') : '';
+    const pctText = Number.isFinite(headerPct) ? `${sign}${headerPct.toFixed(2)}%` : '';
+    document.title = `${label} ${formatPrice(headerPrice)}${arrow ? ' ' + arrow : ''}${pctText ? ' ' + pctText : ''}`;
+  }, [currentPair, headerPrice, headerPct, title.label]);
 
   useEffect(() => {
     migrateAppStorage();
@@ -182,20 +198,23 @@ export default function App() {
               <>
                 <div className="chart-topline">
                   <div className="chart-market-summary">
-                    <h3 id="pair-title">{currentPair}</h3>
-                    {stats24h && (
+                    <h3 id="pair-title">{title.label}</h3>
+                    <span className="coin-source">{sourceLabel(title.source)}</span>
+                    {(stats24h || liveQuote) && (
                       <div id="pair-price">
-                        <strong>{formatPrice(lastPrices[currentPair] ?? 0)}</strong>
-                        <span className={parseFloat(stats24h.priceChangePercent) >= 0 ? 'positive' : 'negative'}>
-                          {parseFloat(stats24h.priceChangePercent) >= 0 ? '+' : ''}{parseFloat(stats24h.priceChangePercent).toFixed(2)}%
-                        </span>
+                        <strong>{headerPrice != null ? formatPrice(headerPrice) : '-'}</strong>
+                        {Number.isFinite(headerPct) && (
+                          <span className={headerPct >= 0 ? 'positive' : 'negative'}>
+                            {headerPct >= 0 ? '+' : ''}{headerPct.toFixed(2)}%
+                          </span>
+                        )}
                       </div>
                     )}
                     {stats24h && (
                       <div className="pair-stats">
-                        <div><span className="label">24h</span> {parseFloat(stats24h.priceChange) >= 0 ? '+' : ''}{parseFloat(stats24h.priceChange).toFixed(4)}</div>
-                        <div><span className="label">Max</span> {stats24h.highPrice.toLocaleString()}</div>
-                        <div><span className="label">Min</span> {stats24h.lowPrice.toLocaleString()}</div>
+                        <div><span className="label">24h</span> {parseFloat(stats24h.priceChange) >= 0 ? '+' : ''}{formatPriceForChart(parseFloat(stats24h.priceChange))}</div>
+                        <div><span className="label">Max</span> {formatPriceForChart(stats24h.highPrice)}</div>
+                        <div><span className="label">Min</span> {formatPriceForChart(stats24h.lowPrice)}</div>
                         <div><span className="label">Vol</span> {compactNumber(stats24h.quoteVolume)}</div>
                       </div>
                     )}
