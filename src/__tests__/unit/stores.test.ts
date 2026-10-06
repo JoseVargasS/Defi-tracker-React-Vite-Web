@@ -8,17 +8,26 @@ beforeEach(() => {
     chartMode: 'tradingview',
     tracked: ['ETHUSDT', 'BTCUSDT', 'USUALUSDT', 'VELODROMEUSDT', 'BATUSDT', 'BIOUSDT'],
     currentPair: null,
-    currentInterval: '1d',
+    currentInterval: '5m',
     chartIndicators: {
       bollinger: true,
       volume: true,
       stochRsi: true,
       volumeProfile: true,
+      macd: false,
+      taker: false,
+      divs: false,
+      signals: false,
+      smc: {
+        swings: false, structure: false, zones: false, premium: false,
+        eq: false, liquidity: false, confluence: false,
+      },
       smaLines: [{ id: 'sma-50', period: 50, color: '#00BCD4', enabled: true }],
       emaLines: [{ id: 'ema-200', period: 200, color: '#4CAF50', enabled: false }],
       rsiEnabled: false,
       rsiPeriod: 14,
       colors: expect.any(Object),
+      drawTool: null,
     },
     lastPrices: {},
     coinsList: [],
@@ -39,7 +48,7 @@ describe('useMarketStore', () => {
     expect(state.activeView).toBe('market');
     expect(state.chartMode).toBe('tradingview');
     expect(state.currentPair).toBeNull();
-    expect(state.currentInterval).toBe('1d');
+    expect(state.currentInterval).toBe('5m');
     expect(state.tracked.length).toBe(6);
   });
 
@@ -103,6 +112,21 @@ describe('useMarketStore', () => {
     const lines = useMarketStore.getState().chartIndicators.emaLines;
     const line = lines.find(l => l.id === 'ema-200');
     expect(line?.period).toBe(100);
+  });
+
+  it('addSmaLine works without cap and ids stay unique', () => {
+    const before = useMarketStore.getState().chartIndicators.smaLines.length;
+    for (let i = 0; i < 10; i++) useMarketStore.getState().addSmaLine();
+    const lines = useMarketStore.getState().chartIndicators.smaLines;
+    expect(lines.length).toBe(before + 10);
+    expect(new Set(lines.map((l) => l.id)).size).toBe(lines.length);
+  });
+
+  it('setSmaLine keeps the customColor flag', () => {
+    useMarketStore.getState().setSmaLine('sma-50', { color: '#ff0000', customColor: true });
+    const line = useMarketStore.getState().chartIndicators.smaLines.find(l => l.id === 'sma-50');
+    expect(line?.color).toBe('#ff0000');
+    expect(line?.customColor).toBe(true);
   });
 
   it('setRsiEnabled toggles RSI', () => {

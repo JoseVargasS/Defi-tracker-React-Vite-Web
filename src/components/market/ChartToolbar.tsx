@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMarketStore } from '@/store/useMarketStore';
-import { CHART_INTERVALS, BINANCE_NATIVE_INTERVALS } from '@/lib/config';
+import { CHART_INTERVALS } from '@/lib/config';
 import type { ChartHandle } from '@/components/market/CandlestickChart';
-import type { MaLineConfig } from '@/lib/chart/types';
+import type { DrawTool, MaLineConfig, SmcToggles } from '@/lib/chart/types';
+import { drawKindLabel, isDrawKind, type DrawKind } from '@/lib/chart/draw';
+import { loadDrawOverlays, loadFibOverlays, saveDrawOverlays, saveFibOverlays } from '@/lib/chart/overlays';
+import { PulsePanel } from '@/components/market/PulsePanel';
 
 interface ChartToolbarProps {
   chartRef: React.RefObject<ChartHandle | null>;
@@ -12,10 +15,10 @@ interface ChartToolbarProps {
 }
 
 // ponytail: 12 buttons for the most-used intervals, all others in a select
-const BUTTON_INTERVAL_KEYS = ['1m', '5m', '15m', '1h', '4h', '12h', '1d', '3d', '5d', '1w', '1M', '3M'];
+const BUTTON_INTERVAL_KEYS = ['1m', '5m', '15m', '1h', '4h', '12h', '1d', '5d', '1w', '2w', '1mo', '1M'];
 const BUTTON_INTERVALS = CHART_INTERVALS.filter((iv) => BUTTON_INTERVAL_KEYS.includes(iv.key));
-const SELECT_INTERVALS = BINANCE_NATIVE_INTERVALS.filter(
-  (iv) => !BUTTON_INTERVAL_KEYS.includes(iv),
+const SELECT_INTERVALS = CHART_INTERVALS.map((iv) => iv.key).filter(
+  (key) => !BUTTON_INTERVAL_KEYS.includes(key),
 );
 
 interface MaModalProps {
@@ -57,23 +60,43 @@ function MaModal({ title, lines, onUpdate, onAdd, onRemove, onClose }: MaModalPr
                   onChange={() => onUpdate(line.id, { enabled: !line.enabled })}
                 />
               </label>
+              <select
+                className="ma-modal-select"
+                value={line.kind ?? (title === 'EMA' ? 'EMA' : 'SMA')}
+                onChange={(e) => onUpdate(line.id, { kind: e.target.value as MaLineConfig['kind'] })}
+                aria-label="Tipo de media"
+              >
+                <option value="SMA">SMA</option>
+                <option value="EMA">EMA</option>
+              </select>
               <span className="ma-modal-label">Period</span>
               <input
                 type="number"
                 className="ma-modal-input"
-                min={1}
-                max={999}
+                min={2}
+                max={500}
                 value={line.period}
                 onChange={(e) => {
                   const v = parseInt(e.target.value, 10);
-                  if (v > 0) onUpdate(line.id, { period: v });
+                  if (v >= 2 && v <= 500) onUpdate(line.id, { period: v });
                 }}
               />
+              <select
+                className="ma-modal-select"
+                value={line.timeframe ?? 'chart'}
+                onChange={(e) => onUpdate(line.id, { timeframe: e.target.value })}
+                aria-label="Temporalidad de la media"
+              >
+                <option value="chart">Chart</option>
+                {CHART_INTERVALS.map((iv) => (
+                  <option key={iv.key} value={iv.key}>{iv.label}</option>
+                ))}
+              </select>
               <input
                 type="color"
                 className="ma-modal-color"
                 value={line.color}
-                onChange={(e) => onUpdate(line.id, { color: e.target.value })}
+                onChange={(e) => onUpdate(line.id, { color: e.target.value, customColor: true })}
               />
               <button
                 type="button"
@@ -88,6 +111,97 @@ function MaModal({ title, lines, onUpdate, onAdd, onRemove, onClose }: MaModalPr
         </div>
         <div className="ma-modal-footer">
           <button type="button" className="ma-modal-add" onClick={onAdd}>+ Add {title}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const SMC_ROWS: { key: keyof SmcToggles; label: string }[] = [
+  { key: 'swings', label: 'Swings' },
+  { key: 'structure', label: 'BOS/CHoCH' },
+  { key: 'zones', label: 'OB + FVG' },
+  { key: 'premium', label: 'Premium' },
+  { key: 'eq', label: 'EQH/EQL' },
+  { key: 'liquidity', label: 'Liquidez' },
+  { key: 'confluence', label: 'Confluencia HTF' },
+];
+
+const DRAW_KINDS: DrawKind[] = [
+  'SEGMENT', 'LINE', 'RAY', 'ARROW', 'H_SEGMENT', 'H_LINE', 'H_RAY',
+  'RECT', 'CIRCLE', 'TRIANGLE', 'PRICE_LINE',
+];
+
+function FibDrawModal({ symbol, onClose }: { symbol: string | null; onClose: () => void }) {
+  const bumpOverlays = useMarketStore((s) => s.bumpOverlays);
+  const [tick, setTick] = useState(0);
+  const fibs = symbol ? loadFibOverlays(symbol) : [];
+  const draws = symbol ? loadDrawOverlays(symbol) : [];
+  const refresh = () => setTick((t) => t + 1);
+  void tick;
+
+  const updateFib = (id: string, updates: { hidden?: boolean }) => {
+    if (!symbol) return;
+    saveFibOverlays(symbol, loadFibOverlays(symbol).map((f) => (f.id === id ? { ...f, ...updates } : f)));
+    bumpOverlays();
+    refresh();
+  };
+  const removeFib = (id: string) => {
+    if (!symbol) return;
+    saveFibOverlays(symbol, loadFibOverlays(symbol).filter((f) => f.id !== id));
+    bumpOverlays();
+    refresh();
+  };
+  const updateDraw = (id: string, updates: { hidden?: boolean }) => {
+    if (!symbol) return;
+    saveDrawOverlays(symbol, loadDrawOverlays(symbol).map((d) => (d.id === id ? { ...d, ...updates } : d)));
+    bumpOverlays();
+    refresh();
+  };
+  const removeDraw = (id: string) => {
+    if (!symbol) return;
+    saveDrawOverlays(symbol, loadDrawOverlays(symbol).filter((d) => d.id !== id));
+    bumpOverlays();
+    refresh();
+  };
+  const clearAll = () => {
+    if (!symbol) return;
+    saveFibOverlays(symbol, []);
+    saveDrawOverlays(symbol, []);
+    bumpOverlays();
+    refresh();
+  };
+
+  return (
+    <div className="ma-modal-overlay">
+      <div className="ma-modal" role="dialog" aria-label="Dibujos">
+        <div className="ma-modal-header">
+          <span>Dibujos ({fibs.length + draws.length})</span>
+          <button type="button" className="ma-modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="ma-modal-body">
+          {fibs.map((f) => (
+            <div className="ma-modal-row" key={f.id}>
+              <label className="ma-modal-check">
+                <input type="checkbox" checked={!f.hidden} onChange={() => updateFib(f.id, { hidden: !f.hidden })} />
+              </label>
+              <span className="ma-modal-label">Fibo {f.enabledLevels.length} niveles</span>
+              <button type="button" className="ma-modal-remove" onClick={() => removeFib(f.id)} title="Eliminar">✕</button>
+            </div>
+          ))}
+          {draws.map((d) => (
+            <div className="ma-modal-row" key={d.id}>
+              <label className="ma-modal-check">
+                <input type="checkbox" checked={!d.hidden} onChange={() => updateDraw(d.id, { hidden: !d.hidden })} />
+              </label>
+              <span className="ma-modal-label">{drawKindLabel(d.kind)}{d.locked ? ' · 🔒' : ''}</span>
+              <button type="button" className="ma-modal-remove" onClick={() => removeDraw(d.id)} title="Eliminar">✕</button>
+            </div>
+          ))}
+          {fibs.length + draws.length === 0 && <p className="alerts-empty">Sin dibujos en este par.</p>}
+        </div>
+        <div className="ma-modal-footer">
+          <button type="button" className="ma-modal-add" onClick={clearAll}>Limpiar todo</button>
         </div>
       </div>
     </div>
@@ -110,10 +224,16 @@ export function ChartToolbar({ chartRef, measureActive, onMeasureActiveChange, o
   const setRsiEnabled = useMarketStore((s) => s.setRsiEnabled);
   const setRsiPeriod = useMarketStore((s) => s.setRsiPeriod);
   const setIndicatorColor = useMarketStore((s) => s.setIndicatorColor);
+  const setSmcToggle = useMarketStore((s) => s.setSmcToggle);
+  const setDrawTool = useMarketStore((s) => s.setDrawTool);
+  const currentPair = useMarketStore((s) => s.currentPair);
 
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [smaModalOpen, setSmaModalOpen] = useState(false);
   const [emaModalOpen, setEmaModalOpen] = useState(false);
+  const [smcModalOpen, setSmcModalOpen] = useState(false);
+  const [drawsModalOpen, setDrawsModalOpen] = useState(false);
+  const [pulseOpen, setPulseOpen] = useState(false);
   const colorBtnRef = useRef<HTMLButtonElement>(null);
   const colorPopupRef = useRef<HTMLDivElement>(null);
 
@@ -152,6 +272,13 @@ export function ChartToolbar({ chartRef, measureActive, onMeasureActiveChange, o
       </button>
       <span className="chart-controls-sep" aria-hidden />
       <div className="chart-mode-toggle" role="radiogroup" aria-label="Tipo de grafica">
+        <button
+          type="button"
+          className={chartMode === 'lightweight' ? 'active' : ''}
+          onClick={() => setChartMode('lightweight')}
+        >
+          Pro
+        </button>
         <button
           type="button"
           className={chartMode === 'chartjs' ? 'active' : ''}
@@ -199,6 +326,10 @@ export function ChartToolbar({ chartRef, measureActive, onMeasureActiveChange, o
           { key: 'volumeProfile' as const, label: 'VP' },
           { key: 'stochRsi' as const, label: 'Stoch RSI' },
           { key: 'rsiEnabled' as const, label: 'RSI' },
+          { key: 'macd' as const, label: 'MACD' },
+          { key: 'taker' as const, label: 'Taker C/V' },
+          { key: 'divs' as const, label: 'Divs' },
+          { key: 'signals' as const, label: 'Señales' },
         ]).map((ind) => (
           <button
             key={ind.key}
@@ -237,6 +368,50 @@ export function ChartToolbar({ chartRef, measureActive, onMeasureActiveChange, o
           onClick={() => setEmaModalOpen((v) => !v)}
         >
           EMA
+        </button>
+        <button
+          type="button"
+          className={`chart-indicator-toggle${SMC_ROWS.some((r) => chartIndicators.smc[r.key]) ? ' active' : ''}`}
+          onClick={() => setSmcModalOpen((v) => !v)}
+        >
+          SMC
+        </button>
+        <button
+          type="button"
+          className={`chart-indicator-toggle${chartIndicators.drawTool === 'FIBO' ? ' active' : ''}`}
+          onClick={() => setDrawTool(chartIndicators.drawTool === 'FIBO' ? null : 'FIBO')}
+          title="Toca 2 puntos del chart"
+        >
+          Fibo
+        </button>
+        <select
+          className="indicator-select"
+          value={chartIndicators.drawTool != null && chartIndicators.drawTool !== 'FIBO' ? chartIndicators.drawTool : ''}
+          onChange={(e) => {
+            const v = e.target.value;
+            const tool: DrawTool = v === '' ? null : isDrawKind(v) ? v : null;
+            setDrawTool(tool);
+          }}
+          aria-label="Herramienta de dibujo"
+        >
+          <option value="">Dibujo</option>
+          {DRAW_KINDS.map((k) => (
+            <option key={k} value={k}>{drawKindLabel(k)}</option>
+          ))}
+        </select>
+        <button
+          type="button"
+          className="chart-indicator-toggle"
+          onClick={() => setDrawsModalOpen(true)}
+        >
+          Dibujos
+        </button>
+        <button
+          type="button"
+          className="chart-indicator-toggle"
+          onClick={() => setPulseOpen(true)}
+        >
+          Pulso
         </button>
         <span className="chart-controls-sep" aria-hidden />
         <button
@@ -322,6 +497,34 @@ export function ChartToolbar({ chartRef, measureActive, onMeasureActiveChange, o
           onClose={() => setEmaModalOpen(false)}
         />
       )}
+      {smcModalOpen && (
+        <div className="ma-modal-overlay">
+          <div className="ma-modal" role="dialog" aria-label="SMC">
+            <div className="ma-modal-header">
+              <span>SMC</span>
+              <button type="button" className="ma-modal-close" onClick={() => setSmcModalOpen(false)}>✕</button>
+            </div>
+            <div className="ma-modal-body">
+              {SMC_ROWS.map((row) => (
+                <div className="ma-modal-row" key={row.key}>
+                  <label className="ma-modal-check">
+                    <input
+                      type="checkbox"
+                      checked={chartIndicators.smc[row.key]}
+                      onChange={() => setSmcToggle(row.key, !chartIndicators.smc[row.key])}
+                    />
+                  </label>
+                  <span className="ma-modal-label">{row.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {drawsModalOpen && (
+        <FibDrawModal symbol={currentPair} onClose={() => setDrawsModalOpen(false)} />
+      )}
+      {pulseOpen && <PulsePanel onClose={() => setPulseOpen(false)} />}
     </div>
   );
 }

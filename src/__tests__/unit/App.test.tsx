@@ -8,6 +8,12 @@ vi.mock('@/api/binance', () => ({
   fetch24hStats: vi.fn().mockResolvedValue(null),
 }));
 
+vi.mock('@/api/market', () => ({
+  fetchPairDetail: vi.fn().mockResolvedValue(null),
+  displayBase: (entry: string) => String(entry || '').replace(/USDT$/, ''),
+  displayQuote: () => '',
+}));
+
 vi.mock('@/lib/storage', () => ({
   migrateAppStorage: vi.fn(),
   readTrackedPairs: vi.fn().mockReturnValue([]),
@@ -38,6 +44,12 @@ vi.mock('@/components/market/TrackedPairs', () => ({
 vi.mock('@/components/market/CandlestickChart', () => ({
   default: ({ symbol }: { symbol: string }) => (
     <div data-testid="candlestick-chart">{symbol || 'no pair'}</div>
+  ),
+}));
+
+vi.mock('@/components/market/LightweightChart', () => ({
+  default: ({ symbol }: { symbol: string }) => (
+    <div data-testid="lightweight-chart">{symbol || 'no pair'}</div>
   ),
 }));
 
@@ -89,6 +101,14 @@ describe('App', () => {
         volume: false,
         stochRsi: false,
         volumeProfile: false,
+        macd: false,
+        taker: false,
+        divs: false,
+        signals: false,
+        smc: {
+          swings: false, structure: false, zones: false, premium: false,
+          eq: false, liquidity: false, confluence: false,
+        },
         smaLines: [{ id: 'sma-50', period: 50, color: '#00BCD4', enabled: false }],
         emaLines: [{ id: 'ema-50', period: 50, color: '#4CAF50', enabled: false }],
         rsiEnabled: false,
@@ -98,6 +118,7 @@ describe('App', () => {
           bbBasis: '#ffffff', bbFill: '#888888',
           stochLevelOver: '#aaa', stochLevelUnder: '#bbb',
         },
+        drawTool: null,
       },
       lastPrices: {},
       coinsList: [],
@@ -250,8 +271,14 @@ describe('App', () => {
     expect(screen.getByLabelText('Restablecer zoom del chart')).toBeTruthy();
   });
 
-  it('renders TradingView widget by default', () => {
-    useMarketStore.setState({ currentPair: 'BTCUSDT' });
+  it('renders Pro chart when lightweight mode selected', async () => {
+    useMarketStore.setState({ currentPair: 'BTCUSDT', chartMode: 'lightweight' });
+    render(<App />);
+    expect(await screen.findByTestId('lightweight-chart')).toBeTruthy();
+  });
+
+  it('renders TradingView widget when tradingview mode selected', () => {
+    useMarketStore.setState({ currentPair: 'BTCUSDT', chartMode: 'tradingview' });
     render(<App />);
     expect(screen.getByTestId('tradingview-widget')).toBeTruthy();
   });
@@ -275,6 +302,7 @@ describe('App', () => {
   it('renders chart mode toggle buttons', () => {
     useMarketStore.setState({ currentPair: 'BTCUSDT' });
     render(<App />);
+    expect(screen.getByText('Pro')).toBeTruthy();
     expect(screen.getByText('Chart.js')).toBeTruthy();
     expect(screen.getByText('TradingView')).toBeTruthy();
   });

@@ -248,6 +248,16 @@ describe('SMA/EMA lines persistence', () => {
     expect(read[1].color).toBe('#4CAF50');
   });
 
+  it('keeps customColor only when true', () => {
+    writeSmaLines([
+      { id: 'a', period: 50, color: '#ff0000', enabled: true, customColor: true },
+      { id: 'b', period: 50, color: '#00BCD4', enabled: true, customColor: false },
+    ]);
+    const read = readSmaLines();
+    expect(read[0].customColor).toBe(true);
+    expect(read[1].customColor).toBeUndefined();
+  });
+
   it('readEmaLines returns defaults when nothing stored', () => {
     const lines = readEmaLines();
     expect(lines.length).toBeGreaterThanOrEqual(1);

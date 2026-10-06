@@ -5,6 +5,8 @@ const root = process.cwd();
 const envPath = path.join(root, '.env');
 const allowedKeys = [
   'BINANCE_API',
+  'BINANCE_FUTURES_API',
+  'MEXC_FUTURES_API',
   'COINSTATS_API',
   'COINSTATS_API_KEY',
   'ETH_API',
@@ -12,6 +14,8 @@ const allowedKeys = [
 ];
 const keyMap = {
   BINANCE_API: 'VITE_BINANCE_API',
+  BINANCE_FUTURES_API: 'VITE_BINANCE_FUTURES_API',
+  MEXC_FUTURES_API: 'VITE_MEXC_FUTURES_API',
   COINSTATS_API: 'VITE_COINSTATS_API',
   COINSTATS_API_KEY: 'VITE_COINSTATS_API_KEY',
   ETH_API: 'VITE_ETH_API',

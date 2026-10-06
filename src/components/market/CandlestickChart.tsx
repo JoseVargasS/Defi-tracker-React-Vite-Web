@@ -31,7 +31,7 @@ const _chartReady = (async () => {
     ((zoom as { default?: unknown }).default ?? zoom) as unknown as ChartComponentLike,
   );
 })();
-import { fetchKlines, fetchLatestKlines } from "@/api/binance";
+import { fetchCandles as fetchKlines, fetchLatestCandles as fetchLatestKlines } from "@/api/market";
 import type { Candle, XY, KlineRaw } from "@/lib/chart/normalize";
 import { normalizeKline } from "@/lib/chart/normalize";
 import {

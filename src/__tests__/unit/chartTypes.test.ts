@@ -51,6 +51,14 @@ describe('ChartIndicatorsState type', () => {
       volume: false,
       stochRsi: true,
       volumeProfile: false,
+      macd: false,
+      taker: false,
+      divs: false,
+      signals: false,
+      smc: {
+        swings: false, structure: false, zones: false, premium: false,
+        eq: false, liquidity: false, confluence: false,
+      },
       smaLines: [smaLine],
       emaLines: [emaLine],
       rsiEnabled: true,
@@ -60,6 +68,7 @@ describe('ChartIndicatorsState type', () => {
         bbBasis: '#ffffff', bbFill: '#888888',
         stochLevelOver: '#aaa', stochLevelUnder: '#bbb',
       },
+      drawTool: null,
     };
     expect(state.bollinger).toBe(true);
     expect(state.smaLines[0].period).toBe(50);

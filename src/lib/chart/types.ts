@@ -12,23 +12,47 @@ export type IndicatorColorKey =
 
 export type IndicatorColors = Record<IndicatorColorKey, string>;
 
+export type MaKind = 'SMA' | 'EMA';
+
 export interface MaLineConfig {
   id: string;
   period: number;
   color: string;
   enabled: boolean;
+  kind?: MaKind;
+  timeframe?: string;
+  width?: number;
+  customColor?: boolean;
 }
+
+export interface SmcToggles {
+  swings: boolean;
+  structure: boolean;
+  zones: boolean;
+  premium: boolean;
+  eq: boolean;
+  liquidity: boolean;
+  confluence: boolean;
+}
+
+export type DrawTool = 'FIBO' | import('@/lib/chart/draw').DrawKind | null;
 
 export interface ChartIndicatorsState {
   bollinger: boolean;
   volume: boolean;
   stochRsi: boolean;
   volumeProfile: boolean;
+  macd: boolean;
+  taker: boolean;
+  divs: boolean;
+  signals: boolean;
+  smc: SmcToggles;
   smaLines: MaLineConfig[];
   emaLines: MaLineConfig[];
   rsiEnabled: boolean;
   rsiPeriod: number;
   colors: IndicatorColors;
+  drawTool: DrawTool;
 }
 
 export interface MeasurePoint { index: number; x: number; y: number }

@@ -18,6 +18,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/zen/, '/chat/completions'),
       },
+      '/api/mexc': {
+        target: 'https://contract.mexc.com/api/v1',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/mexc/, ''),
+      },
     },
   },
   test: {

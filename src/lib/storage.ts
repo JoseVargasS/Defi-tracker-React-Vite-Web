@@ -1,4 +1,5 @@
-import { APP_STORAGE_VERSION, DEFAULT_TRACKED_PAIRS, PAIR_SYMBOL_RE, WALLET_ADDRESS_RE } from '@/lib/config';
+import { APP_STORAGE_VERSION, DEFAULT_TRACKED_PAIRS, PAIR_SYMBOL_RE, WALLET_ADDRESS_RE, formatTrackedPair, parseTrackedPair } from '@/lib/config';
+import { DEFAULT_MONITOR_INTERVALS, DEFAULT_MONITOR_SIGNALS } from '@/lib/alerts';
 import { DEFAULT_INDICATOR_COLORS } from '@/lib/chart/indicators';
 import type { IndicatorColorKey, IndicatorColors, MaLineConfig } from '@/lib/chart/types';
 import { DEFAULT_SMA_LINES, DEFAULT_EMA_LINES } from '@/store/useMarketStore';
@@ -12,6 +13,8 @@ export const STORAGE_KEYS = {
   smaLines: 'chartSmaLines',
   emaLines: 'chartEmaLines',
   aiModel: 'aiModel',
+  divAlerts: 'divAlerts',
+  divMonitor: 'divMonitor',
 } as const;
 
 const HEX_COLOR_RE = /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
@@ -47,18 +50,32 @@ export function writeIndicatorColors(colors: IndicatorColors): IndicatorColors {
   return out;
 }
 
+const MA_TIMEFRAME_RE = /^[a-zA-Z0-9]{1,8}$/;
+
 function sanitizeMaLines(raw: unknown, defaults: MaLineConfig[]): MaLineConfig[] {
   if (!Array.isArray(raw)) return defaults.map(l => ({ ...l }));
   const hexFallback = '#00BCD4';
   return raw.map((item: unknown) => {
     if (!item || typeof item !== 'object') return null;
     const obj = item as Record<string, unknown>;
-    return {
+    const kind = obj.kind === 'SMA' || obj.kind === 'EMA' ? obj.kind : undefined;
+    const timeframe =
+      obj.timeframe === 'chart' || (typeof obj.timeframe === 'string' && MA_TIMEFRAME_RE.test(obj.timeframe))
+        ? obj.timeframe
+        : undefined;
+    const width =
+      typeof obj.width === 'number' && obj.width >= 0.5 && obj.width <= 3 ? obj.width : undefined;
+    const line: MaLineConfig = {
       id: typeof obj.id === 'string' ? obj.id : crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`,
-      period: typeof obj.period === 'number' && obj.period > 0 ? obj.period : 50,
+      period: typeof obj.period === 'number' && obj.period >= 2 && obj.period <= 500 ? Math.round(obj.period) : 50,
       color: sanitizeColor(obj.color) || hexFallback,
       enabled: obj.enabled === true,
+      ...(kind ? { kind } : {}),
+      ...(timeframe ? { timeframe } : {}),
+      ...(width != null ? { width } : {}),
     };
+    if (obj.customColor === true) line.customColor = true;
+    return line;
   }).filter((l): l is MaLineConfig => l !== null);
 }
 
@@ -120,15 +137,25 @@ export function writeSavedWallets(wallets: string[]): string[] {
   return cleanWallets;
 }
 
+const MEXC_SYMBOL_RE = /^[A-Z0-9]{2,20}_[A-Z0-9]{2,20}$/;
+const TV_SYMBOL_RE = /^[A-Z0-9.]{2,20}$/;
+
 function sanitizePairs(pairs: string[]): string[] {
   if (!Array.isArray(pairs)) return [];
   const seen = new Set<string>();
   const clean: string[] = [];
   for (const p of pairs) {
-    const upper = typeof p === 'string' ? p.toUpperCase() : '';
-    if (PAIR_SYMBOL_RE.test(upper) && !seen.has(upper)) {
-      seen.add(upper);
-      clean.push(upper);
+    if (typeof p !== 'string') continue;
+    const { symbol, source } = parseTrackedPair(p);
+    const valid =
+      source === 'MEXC' ? MEXC_SYMBOL_RE.test(symbol)
+      : source === 'TV' ? TV_SYMBOL_RE.test(symbol)
+      : PAIR_SYMBOL_RE.test(symbol);
+    if (!valid) continue;
+    const entry = formatTrackedPair(symbol, source);
+    if (!seen.has(entry)) {
+      seen.add(entry);
+      clean.push(entry);
     }
   }
   return clean.length ? clean : [...DEFAULT_TRACKED_PAIRS];
@@ -177,6 +204,67 @@ export function migrateAppStorage(): void {
   writeSavedWallets(readSavedWallets());
   writeIndicatorColors(readIndicatorColors());
   localStorage.setItem(STORAGE_KEYS.version, APP_STORAGE_VERSION);
+}
+
+export interface DivMonitorPrefs {
+  enabled: boolean;
+  intervals: string[];
+  confluence: boolean;
+  signals: string[];
+}
+
+export function readDivAlerts(): import('@/lib/alerts').DivAlert[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEYS.divAlerts) || '[]');
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (a): a is import('@/lib/alerts').DivAlert =>
+        !!a && typeof a.id === 'string' && typeof a.symbol === 'string',
+    );
+  } catch {
+    return [];
+  }
+}
+
+export function writeDivAlerts(alerts: import('@/lib/alerts').DivAlert[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.divAlerts, JSON.stringify(alerts.slice(0, 200)));
+  } catch {
+    // almacenamiento lleno: las alertas solo viven en la sesion
+  }
+}
+
+export function readDivMonitor(): DivMonitorPrefs {
+  const fallback: DivMonitorPrefs = {
+    enabled: true,
+    intervals: [...DEFAULT_MONITOR_INTERVALS],
+    confluence: true,
+    signals: [...DEFAULT_MONITOR_SIGNALS],
+  };
+  try {
+    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEYS.divMonitor) || 'null') as Partial<DivMonitorPrefs> | null;
+    if (!parsed || typeof parsed !== 'object') return fallback;
+    return {
+      enabled: parsed.enabled !== false,
+      intervals: Array.isArray(parsed.intervals) && parsed.intervals.length
+        ? parsed.intervals.filter((i): i is string => typeof i === 'string')
+        : fallback.intervals,
+      confluence: parsed.confluence !== false,
+      signals: Array.isArray(parsed.signals)
+        ? parsed.signals.filter((i): i is string => typeof i === 'string')
+        : fallback.signals,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+export function writeDivMonitor(prefs: DivMonitorPrefs): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.divMonitor, JSON.stringify(prefs));
+  } catch {
+    // almacenamiento lleno o bloqueado
+  }
 }
 
 export function clearAppStorage(): void {

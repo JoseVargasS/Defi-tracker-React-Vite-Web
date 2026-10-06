@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   formatPrice,
+  formatTitlePrice,
   escapeHTML,
   safeImageUrl,
   safeErrorMessage,
@@ -20,10 +21,33 @@ describe('formatPrice', () => {
     expect(formatPrice('0.5')).toBe('0.500000');
   });
 
-  it('returns 2 decimals for values >= 1', () => {
-    expect(formatPrice(1)).toBe('1.00');
+  it('returns 4 decimals for values in 1-10', () => {
+    expect(formatPrice(1)).toBe('1.0000');
+    expect(formatPrice('9.9')).toBe('9.9000');
+  });
+
+  it('returns 2 decimals for values >= 10', () => {
     expect(formatPrice(123.456)).toBe('123.46');
     expect(formatPrice('99.9')).toBe('99.90');
+  });
+
+  it('returns 0.00 for zero', () => {
+    expect(formatPrice(0)).toBe('0.00');
+  });
+});
+
+describe('formatTitlePrice', () => {
+  it('returns 2 decimals like the app title', () => {
+    expect(formatTitlePrice(1.19)).toBe('1.19');
+    expect(formatTitlePrice(65000)).toBe('65000.00');
+  });
+
+  it('keeps 6 decimals for sub-dollar values', () => {
+    expect(formatTitlePrice(0.12345)).toBe('0.123450');
+  });
+
+  it('returns "-" for NaN', () => {
+    expect(formatTitlePrice(NaN)).toBe('-');
   });
 });
 

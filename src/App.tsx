@@ -6,16 +6,17 @@ import { PairSearch } from '@/components/market/PairSearch';
 import { TrackedPairs } from '@/components/market/TrackedPairs';
 import type { ChartHandle } from '@/components/market/CandlestickChart';
 const CandlestickChart = lazy(() => import('@/components/market/CandlestickChart'));
+const LightweightChart = lazy(() => import('@/components/market/LightweightChart'));
 import { ChartToolbar } from '@/components/market/ChartToolbar';
 import TradingViewWidget from '@/components/market/TradingViewWidget';
 import { WalletSection } from '@/components/wallet/WalletSection';
 import TransactionSection from '@/components/transactions/TransactionSection';
 import { migrateAppStorage, readTrackedPairs, writeTrackedPairs, readIndicatorColors, writeIndicatorColors, readSmaLines, writeSmaLines, readEmaLines, writeEmaLines } from '@/lib/storage';
 import { useMarketStore } from '@/store/useMarketStore';
-import { fetch24hStats } from '@/api/binance';
-import { formatPrice } from '@/lib/utils';
+import { fetchPairDetail, displayBase } from '@/api/market';
+import { formatPrice, formatTitlePrice } from '@/lib/utils';
 import { compactNumber } from '@/lib/chart/normalize';
-import { APP_NAME, splitPairSymbol } from '@/lib/config';
+import { APP_NAME } from '@/lib/config';
 
 interface Stats24h {
   priceChange: string;
@@ -34,6 +35,7 @@ export default function App() {
   const currentPair = useMarketStore((s) => s.currentPair);
   const currentInterval = useMarketStore((s) => s.currentInterval);
   const chartIndicators = useMarketStore((s) => s.chartIndicators);
+  const overlaysTick = useMarketStore((s) => s.overlaysTick);
   const lastPrices = useMarketStore((s) => s.lastPrices);
   const [stats24h, setStats24h] = useState<Stats24h | null>(null);
   const [chartResetSignal, setChartResetSignal] = useState(0);
@@ -44,7 +46,7 @@ export default function App() {
     if (!currentPair) { setStats24h(null); return; }
     let cancelled = false;
     (async () => {
-      const res = await fetch24hStats(currentPair);
+      const res = await fetchPairDetail(currentPair);
       if (cancelled || !res) return;
       setStats24h({
         priceChange: String(res.priceChange ?? '0'),
@@ -63,7 +65,7 @@ export default function App() {
       document.title = APP_NAME;
       return;
     }
-    const { base } = splitPairSymbol(currentPair);
+    const base = displayBase(currentPair);
     const price = lastPrices[currentPair];
     const pct = stats24h ? parseFloat(stats24h.priceChangePercent) : NaN;
     if (price == null || !Number.isFinite(price)) {
@@ -73,7 +75,7 @@ export default function App() {
     const arrow = Number.isFinite(pct) ? (pct >= 0 ? '\u25B2' : '\u25BC') : '';
     const sign = Number.isFinite(pct) ? (pct >= 0 ? '+' : '') : '';
     const pctText = Number.isFinite(pct) ? `${sign}${pct.toFixed(2)}%` : '';
-    document.title = `${base} ${formatPrice(price)}${arrow ? ' ' + arrow : ''}${pctText ? ' ' + pctText : ''}`;
+    document.title = `${base} ${formatTitlePrice(price)}${arrow ? ' ' + arrow : ''}${pctText ? ' ' + pctText : ''}`;
   }, [currentPair, lastPrices, stats24h]);
 
   useEffect(() => {
@@ -206,7 +208,18 @@ export default function App() {
                   />
                 </div>
               <div id="chart-wrapper">
-                  {chartMode === 'chartjs' ? (
+                  {chartMode === 'lightweight' ? (
+                    <Suspense fallback={<div style={{ height: 500 }} />}>
+                      <LightweightChart
+                        ref={chartRef}
+                        symbol={currentPair}
+                        interval={currentInterval}
+                        indicators={chartIndicators}
+                        overlaysTick={overlaysTick}
+                        resetSignal={chartResetSignal}
+                      />
+                    </Suspense>
+                  ) : chartMode === 'chartjs' ? (
                     <Suspense fallback={<div style={{ height: 500 }} />}>
                       <CandlestickChart
                         ref={chartRef}

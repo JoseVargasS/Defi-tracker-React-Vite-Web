@@ -1,6 +1,8 @@
 // Proxy Cloudflare Worker: reenvia el chat a opencode.ai y agrega CORS + la key server-side.
 // La key NUNCA va en el bundle publico; vive como secret del worker (OPENCODE_GO_KEY).
+// Ademas proxyfea GET /mexc/* hacia los futuros de MEXC (contract.mexc.com no manda CORS).
 const UPSTREAM = 'https://opencode.ai/zen/v1/chat/completions';
+const MEXC_UPSTREAM = 'https://contract.mexc.com/api/v1';
 
 // ponytail: allowlist fija; agregar dominios si cambia el hosting
 const ALLOWED_ORIGINS = new Set([
@@ -9,13 +11,26 @@ const ALLOWED_ORIGINS = new Set([
   'http://localhost:4173',
 ]);
 
-function corsHeaders(origin) {
+function corsHeaders(origin, methods = 'POST, OPTIONS') {
   return {
     'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': methods,
     'Access-Control-Allow-Headers': 'authorization, content-type',
     'Access-Control-Max-Age': '86400',
   };
+}
+
+async function handleMexc(request, origin) {
+  const url = new URL(request.url);
+  const upstreamUrl = `${MEXC_UPSTREAM}${url.pathname.replace(/^\/mexc/, '')}${url.search}`;
+  const upstream = await fetch(upstreamUrl, { method: 'GET' });
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: {
+      ...corsHeaders(origin, 'GET, OPTIONS'),
+      'Content-Type': upstream.headers.get('Content-Type') ?? 'application/json',
+    },
+  });
 }
 
 export default {
@@ -26,6 +41,13 @@ export default {
     }
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders(origin) });
+    }
+    const pathname = new URL(request.url).pathname;
+    if (pathname === '/mexc' || pathname.startsWith('/mexc/')) {
+      if (request.method !== 'GET') {
+        return new Response('Metodo no permitido', { status: 405, headers: corsHeaders(origin, 'GET, OPTIONS') });
+      }
+      return handleMexc(request, origin);
     }
     if (request.method !== 'POST') {
       return new Response('Metodo no permitido', { status: 405, headers: corsHeaders(origin) });

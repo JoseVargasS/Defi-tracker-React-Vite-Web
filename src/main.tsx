@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import '@fontsource-variable/geist/wght.css'
 import '@/styles/index.css'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import App from './App'

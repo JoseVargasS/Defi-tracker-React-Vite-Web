@@ -1,7 +1,20 @@
+// Precios de lista tal cual la app: banda de cruce $1-10 con 4 decimales.
 export function formatPrice(price: number | string): string {
   const n = typeof price === 'string' ? parseFloat(price) : price;
-  if (isNaN(n)) return '-';
-  return n < 1 ? n.toFixed(6) : n.toFixed(2);
+  if (!Number.isFinite(n)) return '-';
+  if (n === 0) return '0.00';
+  const abs = Math.abs(n);
+  if (abs < 1) return n.toFixed(6);
+  if (abs < 10) return n.toFixed(4);
+  return n.toFixed(2);
+}
+
+// Título de pestaña/ventana como la app: 2 decimales, salvo sub-$1 (6 como en listas).
+export function formatTitlePrice(price: number | string): string {
+  const n = typeof price === 'string' ? parseFloat(price) : price;
+  if (!Number.isFinite(n)) return '-';
+  if (Math.abs(n) < 1) return formatPrice(n);
+  return n.toFixed(2);
 }
 
 export function escapeHTML(value: string | number | null | undefined): string {
