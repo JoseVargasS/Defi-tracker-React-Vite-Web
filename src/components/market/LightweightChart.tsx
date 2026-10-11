@@ -1,22 +1,25 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
+  AreaSeries,
   CandlestickSeries,
   CrosshairMode,
   HistogramSeries,
   LineSeries,
+  TickMarkType,
   createChart,
   createSeriesMarkers,
   type IChartApi,
   type ISeriesApi,
   type ISeriesMarkersPluginApi,
+  type Logical,
   type SeriesMarker,
   type Time,
   type UTCTimestamp,
 } from 'lightweight-charts';
-import { displayBase, displayPairLabel, fetchCandles, fetchExtendedFlag, fetchLatestCandles } from '@/api/market';
+import { displayBase, displayPairLabel, fetchCandles, fetchCandlesBefore, fetchExtendedFlag, fetchLatestCandles } from '@/api/market';
 import { fetchTakerVolumes } from '@/api/binanceFutures';
 import { calculateBollingerBands, calculateStochRSI, calculateVolumeProfile } from '@/lib/chart/indicators';
-import { calculateMacd } from '@/lib/chart/macd';
+import { calculateMacd, type MacdData } from '@/lib/chart/macd';
 import { computeMaLines, resolveHtfColor, stackTagCenters, type MaConfig } from '@/lib/chart/ma';
 import { calculateRsi, rsiMaOf, toCandleList, type CandleData } from '@/lib/chart/rsi';
 import {
@@ -31,14 +34,17 @@ import { compactVol3, formatAxisPrice, formatCountdown, formatPriceForChart, pre
 import { compactNumber, type Candle } from '@/lib/chart/normalize';
 import {
   COLORS,
+  HISTORY_HARD_CAP,
   intervalAggregate,
   intervalBarCount,
   parseTrackedPair,
 } from '@/lib/config';
+import { CHART_TIMEZONES, readChartTimezone, writeChartTimezone } from '@/lib/storage';
+import { formatClockInZone, formatCrosshairInZone, formatTickInZone, zoneOffsetLabel, zoneShortName } from '@/lib/chart/timezone';
 import type { ChartIndicatorsState, MaLineConfig } from '@/lib/chart/types';
 import type { ChartHandle } from '@/components/market/CandlestickChart';
 import { useMarketStore } from '@/store/useMarketStore';
-import { ALL_FIB_LEVELS, DEFAULT_FIB_LEVELS, fibLevelPrice, hexWithAlpha, hitFibOverlay, levelsSorted, trimRatio, type FibOverlay } from '@/lib/chart/fib';
+import { ALL_FIB_LEVELS, DEFAULT_FIB_LEVELS, fibLevelPrice, hexWithAlpha, hitFibOverlay, levelsSorted, moveFibOverlay, snapFibOverlaysToGrid, trimRatio, type FibAnchor, type FibOverlay } from '@/lib/chart/fib';
 import { drawKindLabel } from '@/lib/chart/draw';
 import { FloatDrawBar } from '@/components/market/FloatDrawBar';
 import { toLineData } from '@/lib/chart/lines';
@@ -55,6 +61,9 @@ interface LightweightChartProps {
 
 const CHART_POLL_MS = 5000;
 const EXTRA_TF_LIMIT = 300;
+// Historial infinito: al quedar pocas velas a la izquierda se traen mas.
+const HISTORY_PREFETCH_BARS = 60;
+const HISTORY_PAGE = 1000;
 // Tags de MAs: alto exacto para el anti-encimado, lider quebrado (tramo
 // corto a 45 grados + recta horizontal hasta el tag).
 const MA_TAG_H = 20;
@@ -64,14 +73,18 @@ const MA_RUN = 30;
 // Alto aprox del cuadro de precio actual (para cederle paso a la cruceta).
 const PRICE_TAG_H = 36;
 const CROSSHAIR_LABEL_HALF = 11;
+// Radio para agarrar anclas del fibo (generoso, estilo TV).
+const FIB_ANCHOR_GRAB_PX = 20;
 // Velas visibles al abrir, estilo TradingView (el resto queda a la izquierda con pan).
 const INITIAL_VISIBLE_BARS = 150;
 const INITIAL_RIGHT_OFFSET_BARS = 8;
 
-type AnySeries = ISeriesApi<'Candlestick' | 'Histogram' | 'Line'>;
+type AnySeries = ISeriesApi<'Candlestick' | 'Histogram' | 'Line' | 'Area'>;
 
 const MACD_DIF_COLOR = '#2962FF';
 const MACD_DEA_COLOR = '#FF6D00';
+// Media del RSI: amarilla bien notoria sobre el fondo oscuro.
+const RSI_MA_COLOR = '#FFD60A';
 
 interface PaneLegends {
   stoch?: { k: number; d: number };
@@ -82,6 +95,31 @@ interface PaneLegends {
 }
 
 const sec = (ms: number): UTCTimestamp => Math.floor(ms / 1000) as UTCTimestamp;
+
+// Velas vacias hacia el futuro: la libreria solo deja panear/clickear donde
+// hay puntos, asi el punto B del fibo (y dibujos) llega bien lejos de la
+// ultima vela real. Solo la serie de velas las lleva; los indicadores usan
+// los datos reales.
+const FUTURE_PAD_BARS = 500;
+
+function futurePadEnd(data: CandleData[]): number | null {
+  if (data.length < 2) return null;
+  const step = data[data.length - 1]!.time - data[data.length - 2]!.time;
+  if (!Number.isFinite(step) || step <= 0) return null;
+  return data[data.length - 1]!.time + step * FUTURE_PAD_BARS;
+}
+
+function candleDisplayData(data: CandleData[]): { time: UTCTimestamp; open?: number; high?: number; low?: number; close?: number }[] {
+  const out: { time: UTCTimestamp; open?: number; high?: number; low?: number; close?: number }[] =
+    data.map((c) => ({ time: sec(c.time), open: c.open, high: c.high, low: c.low, close: c.close }));
+  const end = futurePadEnd(data);
+  if (end == null) return out;
+  const step = data[data.length - 1]!.time - data[data.length - 2]!.time;
+  for (let t = data[data.length - 1]!.time + step; t <= end; t += step) {
+    out.push({ time: sec(t) });
+  }
+  return out;
+}
 
 function toLegacy(candles: CandleData[]): Candle[] {
   return candles.map((c) => ({ x: c.time, o: c.open, h: c.high, l: c.low, c: c.close, v: c.volume, q: 0 }));
@@ -120,24 +158,39 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
   drawToolRef.current = indicators.drawTool;
   const pendingRef = useRef<{ tool: string; time: number; price: number } | null>(null);
   const mouseRef = useRef<{ x: number; y: number } | null>(null);
-  const ghostRef = useRef<AnySeries[]>([]);
   const fibDefsRef = useRef<{ fibId: string; time: UTCTimestamp; price: number; text: string; color: string }[]>([]);
-  const fibSeriesRef = useRef(new Map<string, AnySeries[]>());
   const fibListRef = useRef<FibOverlay[]>([]);
-  const fibPainterRef = useRef<((fib: FibOverlay) => void) | null>(null);
+  // Lienzo infinito: los niveles del fibo son overlay SVG (solo leen
+  // coordenadas, nunca tocan las series ni la escala: dibujar no mueve nada).
+  const [fibLines, setFibLines] = useState<
+    { fibId: string; x1: number; y1: number; x2: number; y2: number; color: string; width: number; dimmed: boolean }[]
+  >([]);
+  const [ghostFib, setGhostFib] = useState<{ tool: string; ax: number; ay: number; bx: number; by: number } | null>(null);
+  const ghostPxRef = useRef<{ tool: string; ax: number; ay: number; bx: number; by: number } | null>(null);
   const [hoverFibId, setHoverFibId] = useState<string | null>(null);
   const hoverIdRef = useRef<string | null>(null);
   const [selectedFibId, setSelectedFibId] = useState<string | null>(null);
-  const [fibBarPos, setFibBarPos] = useState<{ x: number; y: number } | null>(null);
+  const [fibBarPos, setFibBarPos] = useState<Record<string, { x: number; y: number }>>({});
   const [fibSettingsOpen, setFibSettingsOpen] = useState(false);
   const barDragRef = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
   const hoverAnchorRef = useRef<{ id: string; isStart: boolean } | null>(null);
-  const draggingRef = useRef<{ id: string; isStart: boolean } | null>(null);
+  const draggingRef = useRef<{
+    id: string;
+    isStart: boolean;
+    moveBase: { time: number; price: number; start: FibAnchor; end: FibAnchor } | null;
+  } | null>(null);
   const [dragView, setDragView] = useState<{ id: string; start: { time: number; price: number }; end: { time: number; price: number } } | null>(null);
   const [tick, setTick] = useState(0);
   const [drawStep, setDrawStep] = useState(0);
-  const [fibLabels, setFibLabels] = useState<{ top: number; left: number; text: string; color: string }[]>([]);
+  const [fibLabels, setFibLabels] = useState<{ top: number; left: number; text: string; color: string; after: boolean }[]>([]);
   const [paneLegends, setPaneLegends] = useState<PaneLegends | null>(null);
+  // Series alineadas por indice para que las leyendas sigan a la cruceta.
+  const rsiArrRef = useRef<number[]>([]);
+  const rsiMaArrRef = useRef<number[]>([]);
+  const stochArrRef = useRef<{ k: { x: number; y: number | null }[]; d: { x: number; y: number | null }[] } | null>(null);
+  const macdArrRef = useRef<MacdData | null>(null);
+  const paneLastRef = useRef<PaneLegends | null>(null);
+  const hoverPaneIdxRef = useRef<number | null>(null);
   const maTagsRef = useRef<{ time: number; price: number; text: string; color: string }[]>([]);
   const [maTags, setMaTags] = useState<{
     tags: { left: number; top: number; text: string; color: string }[];
@@ -147,6 +200,11 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
   const [priceTagHidden, setPriceTagHidden] = useState(false);
   const priceTagHiddenRef = useRef(false);
   const [countdown, setCountdown] = useState<{ top: number; label: string; price: string; text: string; color: string; dim: string; lineTop: number; lineRight: number; lineBg: string; width?: number } | null>(null);
+  const [tz, setTz] = useState(() => readChartTimezone());
+  const tzRef = useRef(tz);
+  tzRef.current = tz;
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [historyLoading, setHistoryLoading] = useState(false);
   const overlaysRef = useRef<AnySeries[]>([]);
   const colorKeysRef = useRef(new Map<AnySeries, string>());
   const candlesRef = useRef<CandleData[]>([]);
@@ -154,8 +212,34 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
   const [status, setStatus] = useState<'loading' | 'empty' | 'ready'>('loading');
   const [legend, setLegend] = useState('');
   const [chips, setChips] = useState<{ color: string; text: string }[]>([]);
+  // Formato de etiquetas de fibo fuera del efecto de pintado.
+  const fibFmtRef = useRef<{ refClose: number; ext: boolean }>({ refClose: 0, ext: false });
 
-  // Etiquetas al final de cada linea (no pegadas al eje).
+  // x para cualquier tiempo (dentro o fuera de las velas): primero la escala,
+  // si no lo conoce se extrapola con logicalToCoordinate + paso de vela.
+  // Base del lienzo infinito: todo lo dibujado usa esto, nunca series.
+  const xAtTimeMs = useCallback((chartApi: IChartApi, timeMs: number): number | null => {
+    try {
+      const v = chartApi.timeScale().timeToCoordinate(sec(timeMs));
+      if (typeof v === 'number' && Number.isFinite(v)) return v;
+    } catch {
+      // extrapolado abajo
+    }
+    try {
+      const data = candlesRef.current;
+      if (data.length < 2) return null;
+      const first = data[0]!.time;
+      const step = data[data.length - 1]!.time - data[data.length - 2]!.time;
+      if (!Number.isFinite(step) || step <= 0) return null;
+      const x = chartApi.timeScale().logicalToCoordinate(((timeMs - first) / step) as Logical);
+      return typeof x === 'number' && Number.isFinite(x) ? x : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Etiquetas al final de cada linea, fuera de ella (a la derecha del
+  // punto final; si no hay sitio, a la izquierda como antes).
   const refreshFibLabels = useCallback(() => {
     const chartApi = chartRef.current;
     const candlesApi = candleRef.current;
@@ -163,7 +247,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     if (!chartApi || !candlesApi || !el) return;
     const width = el.clientWidth || 0;
     const height = el.clientHeight || 500;
-    const out: { top: number; left: number; text: string; color: string }[] = [];
+    const out: { top: number; left: number; text: string; color: string; after: boolean }[] = [];
     for (const def of fibDefsRef.current) {
       let y: number | null = null;
       let x: number | null = null;
@@ -173,7 +257,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
         y = null;
       }
       try {
-        x = chartApi.timeScale().timeToCoordinate(def.time);
+        x = xAtTimeMs(chartApi, def.time * 1000);
       } catch {
         x = null;
       }
@@ -183,9 +267,72 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       ) {
         continue;
       }
-      out.push({ top: y, left: Math.min(Math.max(x - 4, 8), Math.max(width - 8, 8)), text: def.text, color: def.color });
+      const after = x <= width - 90;
+      out.push({
+        top: y,
+        left: after
+          ? Math.min(x + 8, Math.max(width - 8, 8))
+          : Math.min(Math.max(x - 4, 8), Math.max(width - 8, 8)),
+        text: def.text,
+        color: def.color,
+        after,
+      });
     }
     setFibLabels(out);
+  }, [xAtTimeMs]);
+
+  // Niveles del fibo como overlay SVG: solo lee coordenadas (hoverIdRef para
+  // el atenuado, sin depender del estado y sin re-suscribir nada).
+  const refreshFibLines = useCallback(() => {
+    const chartApi = chartRef.current;
+    const candlesApi = candleRef.current;
+    const el = containerRef.current;
+    if (!chartApi || !candlesApi || !el) return;
+    const H = el.clientHeight || 500;
+    const hovered = hoverIdRef.current;
+    const out: { fibId: string; x1: number; y1: number; x2: number; y2: number; color: string; width: number; dimmed: boolean }[] = [];
+    for (const fib of fibListRef.current) {
+      if (fib.hidden) continue;
+      const x1 = xAtTimeMs(chartApi, fib.start.time);
+      const x2 = xAtTimeMs(chartApi, fib.end.time);
+      if (x1 == null || x2 == null) continue;
+      const dimmed = hovered != null && fib.id !== hovered;
+      const color = dimmed ? (hexWithAlpha(fib.colorHex, 0.35) ?? fib.colorHex) : fib.colorHex;
+      for (const ratio of levelsSorted(fib)) {
+        const price = fibLevelPrice(fib.end.price, fib.start.price, ratio);
+        let y: number | null = null;
+        try {
+          const v = candlesApi.priceToCoordinate(price);
+          if (typeof v === 'number' && Number.isFinite(v)) y = v;
+        } catch {
+          y = null;
+        }
+        if (y == null || y < 0 || y > H) continue;
+        out.push({ fibId: fib.id, x1, y1: y, x2, y2: y, color, width: fib.width, dimmed });
+      }
+    }
+    setFibLines(out);
+  }, [xAtTimeMs]);
+
+  // Etiquetas de un fibo (una por nivel, en el punto final). Fuente unica
+  // para pintado, patch, drag y borrado: si no, quedan numeros huerfanos.
+  const syncFibDefs = useCallback((fib: FibOverlay) => {
+    const { refClose, ext } = fibFmtRef.current;
+    const endT = fib.end.time >= fib.start.time ? sec(fib.end.time) : sec(fib.start.time);
+    const defs = levelsSorted(fib).map((ratio) => {
+      const price = fibLevelPrice(fib.end.price, fib.start.price, ratio);
+      return {
+        fibId: fib.id,
+        time: endT,
+        price,
+        text: `${trimRatio(ratio)} (${formatAxisPrice(price, refClose, ext)})`,
+        color: fib.colorHex,
+      };
+    });
+    fibDefsRef.current = [
+      ...fibDefsRef.current.filter((d) => d.fibId !== fib.id),
+      ...defs,
+    ];
   }, []);
 
   // Cuenta regresiva al cierre: paso de vela sale de los datos, sin tabla de TFs.
@@ -194,6 +341,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     const candlesApi = candleRef.current;
     const el = containerRef.current;
     const data = candlesRef.current;
+    setNowMs(Date.now());
     priceTagTopRef.current = null;
     if (!chartApi || !candlesApi || !el || data.length < 2) {
       setCountdown(null);
@@ -323,6 +471,36 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     },
   }), []);
 
+  // Eje de tiempo y cruceta en la zona elegida (por defecto Lima, como TV).
+  const applyTimezone = useCallback((chart: IChartApi, zone: string) => {
+    try {
+      chart.applyOptions({
+        localization: {
+          locale: 'es-PE',
+          timeFormatter: (t: Time) =>
+            typeof t === 'number' ? formatCrosshairInZone(t, zone) : String(t),
+        },
+        timeScale: {
+          tickMarkFormatter: (t: Time, tk: TickMarkType) => {
+            if (typeof t !== 'number') return String(t);
+            const kind = tk === TickMarkType.Year ? 'year'
+              : tk === TickMarkType.Month ? 'month'
+              : tk === TickMarkType.DayOfMonth ? 'day'
+              : 'time';
+            return formatTickInZone(t, kind, zone);
+          },
+        },
+      });
+    } catch {
+      // chart en reconstruccion
+    }
+  }, []);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (chart) applyTimezone(chart, tz);
+  }, [tz, applyTimezone, status]);
+
   // El fibo hovereado queda seleccionado (como TradingView) hasta borrarlo o elegir otro.
   useEffect(() => {
     if (hoverFibId) setSelectedFibId(hoverFibId);
@@ -347,7 +525,6 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     const el = containerRef.current;
     if (!el || !symbol) return;
     let cancelled = false;
-    const fibSeries = fibSeriesRef.current;
 
     const chart = createChart(el, {
       layout: { background: { color: COLORS.bg }, textColor: COLORS.ink2 },
@@ -356,6 +533,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       timeScale: { timeVisible: true, secondsVisible: false, rightOffset: 4, barSpacing: 9 },
     });
     chartRef.current = chart;
+    applyTimezone(chart, tzRef.current);
 
     const candles = chart.addSeries(CandlestickSeries, {
       upColor: COLORS.up,
@@ -363,6 +541,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       wickUpColor: COLORS.up,
       wickDownColor: COLORS.down,
       borderVisible: false,
+      priceScaleId: 'right',
       // El tag de precio + contador es propio (un solo cuadro): se apaga el nativo.
       lastValueVisible: false,
     });
@@ -398,8 +577,8 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       const candlesApi = candleRef.current;
       if (!candlesApi) return null;
       try {
-        const ax = chart.timeScale().timeToCoordinate(sec(fib.start.time));
-        const bx = chart.timeScale().timeToCoordinate(sec(fib.end.time));
+        const ax = xAtTimeMs(chart, fib.start.time);
+        const bx = xAtTimeMs(chart, fib.end.time);
         const ay = candlesApi.priceToCoordinate(fib.start.price);
         const by = candlesApi.priceToCoordinate(fib.end.price);
         if (ax == null || bx == null || ay == null || by == null) return null;
@@ -410,20 +589,53 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       }
     };
 
+    // Tiempo para cualquier x del chart, aun fuera de las velas (futuro o
+    // pasado): coordinateToTime devuelve null mas alla de la ultima vela, asi
+    // que se extrapola con el paso de vela. Magnet estilo TV: siempre cae
+    // sobre una vela/punto real (nunca entre velas) para no churnear los
+    // puntos de la escala y que la vista no se mueva sola al dibujar.
+    const timeAtX = (x: number): number | null => {
+      const data = candlesRef.current;
+      if (data.length < 2) return null;
+      const first = data[0]!.time;
+      const step = data[data.length - 1]!.time - data[data.length - 2]!.time;
+      if (!Number.isFinite(step) || step <= 0) return null;
+      const snap = (logical: number): number | null => {
+        if (!Number.isFinite(logical)) return null;
+        const idx = Math.min(
+          Math.max(Math.round(logical), 0),
+          data.length - 1 + FUTURE_PAD_BARS,
+        );
+        return first + idx * step;
+      };
+      try {
+        const t = chart.timeScale().coordinateToTime(x);
+        if (t != null) {
+          const snapped = snap((Number(t) * 1000 - first) / step);
+          return snapped ?? Number(t) * 1000;
+        }
+      } catch {
+        // cae al extrapolado
+      }
+      try {
+        const logical = chart.timeScale().coordinateToLogical(x);
+        if (logical == null) return null;
+        return snap(logical);
+      } catch {
+        return null;
+      }
+    };
+
     const moveDraggedAnchor = () => {
       const drag = draggingRef.current;
       const mouse = mouseRef.current;
       const candlesApi = candleRef.current;
       if (!drag || !mouse || !candlesApi) return;
-      let timeMs: number | null = null;
+      const timeMs: number | null = timeAtX(mouse.x);
       let price: number | null = null;
       try {
-        const t = chart.timeScale().coordinateToTime(mouse.x);
         const p = candlesApi.coordinateToPrice(mouse.y);
-        if (t != null && typeof p === 'number' && Number.isFinite(p)) {
-          timeMs = Number(t) * 1000;
-          price = p;
-        }
+        if (typeof p === 'number' && Number.isFinite(p)) price = p;
       } catch {
         // fuera de escala
       }
@@ -433,12 +645,34 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
         draggingRef.current = null;
         return;
       }
-      const updated: FibOverlay = drag.isStart
-        ? { ...fib, start: { time: timeMs, price } }
-        : { ...fib, end: { time: timeMs, price } };
+      // timeAtX ya viene con magnet: los deltas son multiplos del paso,
+      // asi la forma se conserva exacta al trasladar. El delta siempre parte
+      // de las anclas originales (no del fibo ya movido) para no contar doble.
+      const movedBase = drag.moveBase;
+      const updated: FibOverlay = movedBase
+        ? moveFibOverlay(
+            { ...fib, start: movedBase.start, end: movedBase.end },
+            timeMs - movedBase.time,
+            price - movedBase.price,
+          )
+        : drag.isStart
+          ? { ...fib, start: { time: timeMs, price } }
+          : { ...fib, end: { time: timeMs, price } };
+      // Frame sin cambio (misma vela y precio): se salta todo para no
+      // re-renderizar ni tocar series en vano.
+      if (
+        updated.start.time === fib.start.time &&
+        updated.start.price === fib.start.price &&
+        updated.end.time === fib.end.time &&
+        updated.end.price === fib.end.price
+      ) {
+        return;
+      }
       fibListRef.current = fibListRef.current.map((f) => (f.id === drag.id ? updated : f));
       setDragView({ id: updated.id, start: { ...updated.start }, end: { ...updated.end } });
-      fibPainterRef.current?.(updated);
+      // Solo overlay: el chart ni se entera (no se mueve nada).
+      syncFibDefs(updated);
+      refreshFibLines();
       refreshFibLabels();
     };
 
@@ -480,7 +714,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
         }
         return;
       }
-      if (drawToolRef.current === 'FIBO' && pendingRef.current && !ghostQueued) {
+      if (drawToolRef.current && pendingRef.current && !ghostQueued) {
         ghostQueued = true;
         rafThrottle(() => {
           ghostQueued = false;
@@ -500,12 +734,12 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
         const pts = fibPixels(fib);
         if (!pts) continue;
         if (!fib.locked) {
-          if (Math.hypot(mouse.x - pts.ax, mouse.y - pts.ay) <= 12) {
+          if (Math.hypot(mouse.x - pts.ax, mouse.y - pts.ay) <= FIB_ANCHOR_GRAB_PX) {
             anchor = { id: fib.id, isStart: true };
             hovered = fib;
             break;
           }
-          if (Math.hypot(mouse.x - pts.bx, mouse.y - pts.by) <= 12) {
+          if (Math.hypot(mouse.x - pts.bx, mouse.y - pts.by) <= FIB_ANCHOR_GRAB_PX) {
             anchor = { id: fib.id, isStart: false };
             hovered = fib;
             break;
@@ -515,8 +749,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       if (!hovered) {
         const toX = (timeMs: number): number | null => {
           try {
-            const v = chart.timeScale().timeToCoordinate(sec(timeMs));
-            return typeof v === 'number' && Number.isFinite(v) ? v : null;
+            return xAtTimeMs(chart, timeMs);
           } catch {
             return null;
           }
@@ -556,15 +789,51 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     const onMouseDown = (e: MouseEvent) => {
       if (drawToolRef.current || e.button !== 0) return;
       const anchor = hoverAnchorRef.current;
-      if (!anchor) {
+      const hoveredFib = !anchor && hoverIdRef.current
+        ? fibListRef.current.find((f) => f.id === hoverIdRef.current)
+        : undefined;
+      if (!anchor && !hoveredFib) {
         if (!hoverIdRef.current) setSelectedFibId(null);
         else setSelectedFibId(hoverIdRef.current);
         return;
       }
-      const fib = fibListRef.current.find((f) => f.id === anchor.id);
+      const fib = anchor
+        ? fibListRef.current.find((f) => f.id === anchor.id)
+        : hoveredFib;
       if (!fib || fib.locked || fib.hidden) return;
-      draggingRef.current = anchor;
+      if (!anchor && hoveredFib) {
+        // Agarró el cuerpo: traslada ambas anclas conservando la forma.
+        const mouse = mouseRef.current;
+        const candlesApi = candleRef.current;
+        const baseTime = mouse ? timeAtX(mouse.x) : null;
+        let basePrice: number | null = null;
+        try {
+          const p = mouse && candlesApi ? candlesApi.coordinateToPrice(mouse.y) : null;
+          if (typeof p === 'number' && Number.isFinite(p)) basePrice = p;
+        } catch {
+          // fuera de escala
+        }
+        if (baseTime == null || basePrice == null) {
+          setSelectedFibId(fib.id);
+          return;
+        }
+        draggingRef.current = {
+          id: fib.id,
+          isStart: false,
+          moveBase: { time: baseTime, price: basePrice, start: { ...fib.start }, end: { ...fib.end } },
+        };
+      } else if (anchor) {
+        draggingRef.current = { ...anchor, moveBase: null };
+      } else {
+        return;
+      }
+      setSelectedFibId(fib.id);
       setDragView({ id: fib.id, start: { ...fib.start }, end: { ...fib.end } });
+      try {
+        chart.applyOptions({ handleScroll: false, handleScale: false });
+      } catch {
+        // chart en reconstruccion
+      }
       e.preventDefault();
       e.stopPropagation();
     };
@@ -572,6 +841,11 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       const drag = draggingRef.current;
       if (!drag) return;
       draggingRef.current = null;
+      try {
+        chart.applyOptions({ handleScroll: true, handleScale: true });
+      } catch {
+        // chart en reconstruccion
+      }
       const fib = fibListRef.current.find((f) => f.id === drag.id);
       if (fib) {
         try {
@@ -588,69 +862,49 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     el.addEventListener('mousedown', onMouseDown, true);
     window.addEventListener('mouseup', onMouseUp);
 
-    // Fibo fantasma mientras se dibuja: niveles continuos A -> cursor.
+    // Fibo fantasma mientras se dibuja: niveles continuos A -> cursor, en
+    // pixeles (sin series: no toca la escala ni mueve nada).
     const clearGhost = () => {
-      for (const s of ghostRef.current) {
-        try {
-          chart.removeSeries(s);
-        } catch {
-          // ya removida
-        }
-      }
-      ghostRef.current = [];
+      ghostPxRef.current = null;
+      setGhostFib(null);
     };
-    // Solo niveles creciendo del punto A al cursor (la app no pinta diagonal base).
+    // Fantasma para cualquier herramienta: A en pixeles, B = cursor.
     const paintGhostFib = () => {
+      const tool = drawToolRef.current;
       const pending = pendingRef.current;
       const mouse = mouseRef.current;
       const candlesApi = candleRef.current;
-      if (drawToolRef.current !== 'FIBO' || !pending || !mouse || !candlesApi) return;
-      let endTime: number | null = null;
+      const chartApi = chartRef.current;
+      if (!tool || !pending || !mouse || !candlesApi || !chartApi) return;
+      let ax: number | null = null;
+      let ay: number | null = null;
       try {
-        const t = chart.timeScale().coordinateToTime(mouse.x);
-        if (t != null) endTime = Number(t) * 1000;
+        ax = xAtTimeMs(chartApi, pending.time);
       } catch {
-        endTime = null;
+        ax = null;
       }
-      let endPrice: number | null = null;
       try {
-        const p = candlesApi.coordinateToPrice(mouse.y);
-        if (typeof p === 'number' && Number.isFinite(p)) endPrice = p;
+        const v = candlesApi.priceToCoordinate(pending.price);
+        if (typeof v === 'number' && Number.isFinite(v)) ay = v;
       } catch {
-        endPrice = null;
+        ay = null;
       }
-      if (endTime == null || !Number.isFinite(endTime) || endPrice == null) return;
-      if (ghostRef.current.length === 0) {
-        for (let i = 0; i < DEFAULT_FIB_LEVELS.length; i++) {
-          try {
-            ghostRef.current.push(chart.addSeries(LineSeries, {
-              color: 'rgba(255,255,255,0.65)',
-              lineWidth: 1,
-              lineStyle: 0,
-              priceLineVisible: false,
-              lastValueVisible: false,
-              crosshairMarkerVisible: false,
-            }));
-          } catch {
-            break;
-          }
-        }
+      if (ax == null || ay == null) {
+        ghostPxRef.current = null;
+        setGhostFib(null);
+        return;
       }
-      const ghost = ghostRef.current;
-      if (!ghost.length) return;
-      DEFAULT_FIB_LEVELS.forEach((ratio, i) => {
-        const s = ghost[i];
-        if (!s) return;
-        const price = fibLevelPrice(endPrice as number, pending.price, ratio);
-        try {
-          s.setData(toLineData([
-            { time: sec(pending.time), value: price },
-            { time: sec(endTime as number), value: price },
-          ]));
-        } catch {
-          // frame descartado
-        }
-      });
+      const next = { tool, ax, ay, bx: mouse.x, by: mouse.y };
+      const prev = ghostPxRef.current;
+      if (
+        prev && prev.tool === next.tool &&
+        Math.abs(prev.ax - next.ax) < 1 && Math.abs(prev.ay - next.ay) < 1 &&
+        Math.abs(prev.bx - next.bx) < 1 && Math.abs(prev.by - next.by) < 1
+      ) {
+        return;
+      }
+      ghostPxRef.current = next;
+      setGhostFib(next);
     };
 
     const cross = (param: { time?: unknown }) => {
@@ -662,11 +916,19 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
         const data = candlesRef.current;
         if (!data.length) return;
         let candle = data[data.length - 1]!;
+        let idx = data.length - 1;
         if (snapshot != null) {
           const t = Number(snapshot) * 1000;
-          const found = data.find((c) => c.time >= t);
-          if (found) candle = found;
+          const foundIdx = data.findIndex((c) => c.time >= t);
+          if (foundIdx >= 0) {
+            idx = foundIdx;
+            candle = data[foundIdx]!;
+          }
         }
+        // Misma vela que el frame anterior: no re-renderiza (anti-freeze).
+        const hoverKey = snapshot != null ? idx : -1;
+        if (hoverPaneIdxRef.current === hoverKey) return;
+        hoverPaneIdxRef.current = hoverKey;
         const chg = candle.open ? ((candle.close - candle.open) / candle.open) * 100 : 0;
         const ext = extendedRef.current;
         setLegend(
@@ -674,14 +936,119 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
           `L ${formatPriceForChart(candle.low, ext)}  C ${formatPriceForChart(candle.close, ext)}  ` +
           `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`,
         );
+        // Subpaneles siguen a la cruceta: valores de la vela apuntada, no de la ultima.
+        const base = paneLastRef.current;
+        if (base) {
+          const next: PaneLegends = { ...base };
+          if (snapshot != null) {
+            const rsi = rsiArrRef.current;
+            if (base.rsi && rsi.length === data.length) {
+              const v = rsi[idx] ?? 0;
+              const m = rsiMaArrRef.current[idx] ?? 0;
+              if (v > 0) next.rsi = { v, ma: m > 0 ? m : null };
+            }
+            const st = stochArrRef.current;
+            if (base.stoch && st && st.k.length === data.length) {
+              const k = st.k[idx]?.y ?? null;
+              const d = st.d[idx]?.y ?? null;
+              if (k != null && d != null) next.stoch = { k, d };
+            }
+            const mc = macdArrRef.current;
+            if (base.macd && mc) {
+              const atIdx = (pairs: [number, number][]): number | null => {
+                let v: number | null = null;
+                for (const [i, val] of pairs) {
+                  if (i <= idx) v = val;
+                  else break;
+                }
+                return v;
+              };
+              const dif = atIdx(mc.dif);
+              const dea = atIdx(mc.dea);
+              const hist = atIdx(mc.hist);
+              if (dif != null && dea != null && hist != null) {
+                next.macd = { hist, dif, dea, p: base.macd.p };
+              }
+            }
+            const vol = data[idx]?.volume;
+            if (base.vol && typeof vol === 'number') next.vol = { total: compactNumber(vol) };
+          }
+          setPaneLegends(next);
+        }
       });
     };
     chart.subscribeCrosshairMove(cross);
+
     chart.timeScale().subscribeVisibleLogicalRangeChange(() => {
       refreshFibLabels();
       refreshCountdown();
       refreshMaTags();
     });
+
+    // Historial infinito hacia atras: al acercarse al borde izquierdo se traen
+    // velas mas viejas y se anteponen sin mover la vista. Una carga a la vez,
+    // tope en memoria para no perder fluidez.
+    let historyLoading = false;
+    let historyDone = false;
+    const loadOlderHistory = () => {
+      if (historyLoading || historyDone || cancelled) return;
+      let range: { from: number; to: number } | null = null;
+      try {
+        range = chart.timeScale().getVisibleLogicalRange();
+      } catch {
+        return;
+      }
+      if (!range || range.from > HISTORY_PREFETCH_BARS) return;
+      const data = candlesRef.current;
+      const candlesApi = candleRef.current;
+      if (!candlesApi || data.length < 2) return;
+      if (data.length >= HISTORY_HARD_CAP) {
+        historyDone = true;
+        return;
+      }
+      historyLoading = true;
+      setHistoryLoading(true);
+      const oldest = data[0]!.time;
+      fetchCandlesBefore(symbol, interval, oldest - 1, HISTORY_PAGE)
+        .then((rows) => {
+          if (cancelled) return;
+          const have = new Set(data.map((c) => c.time));
+          const add = toCandleList(rows).filter((c) => c.time < oldest && !have.has(c.time));
+          if (!add.length) {
+            historyDone = true;
+            return;
+          }
+          const merged = [...add, ...data].slice(-HISTORY_HARD_CAP);
+          const added = merged.length - data.length;
+          if (added <= 0) {
+            historyDone = true;
+            return;
+          }
+          candlesRef.current = merged;
+          try {
+            candlesApi.setData(candleDisplayData(merged));
+          } catch {
+            // serie en reconstruccion
+          }
+          try {
+            const cur = chart.timeScale().getVisibleLogicalRange();
+            if (cur && added > 0) {
+              chart.timeScale().setVisibleLogicalRange({ from: cur.from + added, to: cur.to + added });
+            }
+          } catch {
+            // vista en transicion
+          }
+          setTick((t) => t + 1);
+        })
+        .catch(() => {
+          // el proximo scroll reintenta
+        })
+        .finally(() => {
+          historyLoading = false;
+          if (!cancelled) setHistoryLoading(false);
+        });
+    };
+    chart.timeScale().subscribeVisibleLogicalRangeChange(loadOlderHistory);
 
     // Scroll sobre el eje Y = zoom solo vertical; fuera del eje, zoom horizontal nativo.
     const onWheel = (e: WheelEvent) => {
@@ -750,11 +1117,11 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       const mouse = mouseRef.current;
       const candlesApi = candleRef.current;
       if (mouse && candlesApi) {
+        const timeMs = timeAtX(mouse.x);
         try {
-          const t = chart.timeScale().coordinateToTime(mouse.x);
           const p = candlesApi.coordinateToPrice(mouse.y);
-          if (t != null && typeof p === 'number' && Number.isFinite(p)) {
-            return { time: Number(t) * 1000, price: p };
+          if (timeMs != null && typeof p === 'number' && Number.isFinite(p)) {
+            return { time: timeMs, price: p };
           }
         } catch {
           // cae al fallback por serie
@@ -809,7 +1176,16 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       setDrawStep(0);
       clearGhost();
       useMarketStore.getState().setDrawTool(null);
-      useMarketStore.getState().bumpOverlays();
+      if (tool === 'FIBO') {
+        // Solo overlay: el chart ni se entera.
+        fibListRef.current = loadFibOverlays(symbol);
+        const created = fibListRef.current.find((f) => f.id === id);
+        if (created) syncFibDefs(created);
+        refreshFibLines();
+        refreshFibLabels();
+      } else {
+        useMarketStore.getState().bumpOverlays();
+      }
     };
     chart.subscribeClick(onClick);
 
@@ -835,9 +1211,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
         localization: { priceFormatter: (p: number) => formatPriceForChart(p, extendedRef.current) },
       });
       candles.applyOptions({ priceFormat: { type: 'price', precision, minMove: 1 / 10 ** precision } });
-      candles.setData(data.map((c) => ({
-        time: sec(c.time), open: c.open, high: c.high, low: c.low, close: c.close,
-      })));
+      candles.setData(candleDisplayData(data));
       cross({});
       // Estilo TradingView: enmarcar las ultimas N velas en vez de
       // encoger toda la historia (fitContent la deja ilegible).
@@ -882,6 +1256,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       draggingRef.current = null;
       hoverAnchorRef.current = null;
       hoverIdRef.current = null;
+      hoverPaneIdxRef.current = null;
       el.style.cursor = '';
       chart.remove();
       chartRef.current = null;
@@ -889,50 +1264,27 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       markersRef.current = null;
       overlaysRef.current = [];
       candlesRef.current = [];
-      ghostRef.current = [];
       pendingRef.current = null;
       fibDefsRef.current = [];
-      fibSeries.clear();
-      fibPainterRef.current = null;
       fibListRef.current = [];
       draggingRef.current = null;
       hoverAnchorRef.current = null;
     };
-  }, [symbol, interval, refreshFibLabels, refreshCountdown, refreshMaTags]);
+  }, [symbol, interval, applyTimezone, refreshFibLabels, refreshFibLines, refreshCountdown, refreshMaTags, syncFibDefs, xAtTimeMs]);
 
   // Si se suelta la herramienta a medias, se limpia el fantasma y el pendiente.
   useEffect(() => {
     if (indicators.drawTool) return;
     pendingRef.current = null;
-    const chartApi = chartRef.current;
-    for (const s of ghostRef.current) {
-      try {
-        chartApi?.removeSeries(s);
-      } catch {
-        // ya removida
-      }
-    }
-    ghostRef.current = [];
+    ghostPxRef.current = null;
+    setGhostFib(null);
     setDrawStep(0);
   }, [indicators.drawTool]);
 
-  // Fibo hovereado a full, los demas tenues (como la app).
+  // Fibo hovereado a full, los demas tenues: el overlay se re-deriva.
   useEffect(() => {
-    const map = fibSeriesRef.current;
-    if (!map.size) return;
-    for (const [id, series] of map) {
-      const base = fibListRef.current.find((f) => f.id === id)?.colorHex ?? '#FFFFFF';
-      const dimmed = hoverFibId != null && id !== hoverFibId;
-      const color = dimmed ? (hexWithAlpha(base, 0.35) ?? base) : base;
-      for (const s of series) {
-        try {
-          s.applyOptions({ color } as never);
-        } catch {
-          // serie ya removida
-        }
-      }
-    }
-  }, [hoverFibId]);
+    refreshFibLines();
+  }, [hoverFibId, refreshFibLines]);
 
   // Series de indicadores: se reconstruyen al cambiar toggles o datos.
   useEffect(() => {
@@ -950,10 +1302,8 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     }
     overlaysRef.current = [];
     colorKeysRef.current.clear();
-    fibSeriesRef.current.clear();
     fibDefsRef.current = [];
     maTagsRef.current = [];
-    fibPainterRef.current = null;
     for (const { series, line } of priceLinesRef.current) {
       try {
         series.removePriceLine(line);
@@ -975,9 +1325,8 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       const h = reserved / Math.max(groups.length, 1);
       return { top: 1 - reserved + i * h + 0.01, bottom: Math.max(reserved - (i + 1) * h, 0) };
     };
-    chart.priceScale('right').applyOptions({
-      scaleMargins: { top: 0.08, bottom: reserved + 0.05 },
-    });
+    const candleMargins = { top: 0.08, bottom: reserved + 0.05 };
+    chart.priceScale('right').applyOptions({ scaleMargins: candleMargins });
     const track = (s: AnySeries, colorKey?: string): AnySeries => {
       overlaysRef.current.push(s);
       if (colorKey) colorKeysRef.current.set(s, colorKey);
@@ -989,6 +1338,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     const colors = indicators.colors;
     const ext = extendedRef.current;
     const refClose = data[data.length - 1]!.close;
+    fibFmtRef.current = { refClose, ext };
     const fmtP = (v: number): string => {
       const s = formatAxisPrice(v, refClose, ext);
       return /^-0\.0+$/.test(s) ? s.slice(1) : s;
@@ -1008,13 +1358,13 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       const bb = calculateBollingerBands(legacy, 20, 2);
       const toData = (pts: { x: number; y: number | null }[]) =>
         pts.map((p, i) => ({ time: times[i]!, value: p.y as number })).filter((p) => Number.isFinite(p.value));
-      const basis = track(chart.addSeries(LineSeries, { color: colors.bbBasis, lineWidth: 1, ...quiet }));
+      const basis = track(chart.addSeries(LineSeries, { color: colors.bbBasis, lineWidth: 1, priceScaleId: 'right', ...quiet }));
       basis.setData(toData(bb.middle));
       const upper = track(
-        chart.addSeries(LineSeries, { color: colors.bbLine, lineWidth: 1, ...quiet }), 'bbLine',
+        chart.addSeries(LineSeries, { color: colors.bbLine, lineWidth: 1, priceScaleId: 'right', ...quiet }), 'bbLine',
       );
       upper.setData(toData(bb.upper));
-      const lower = track(chart.addSeries(LineSeries, { color: colors.bbLine, lineWidth: 1, ...quiet }));
+      const lower = track(chart.addSeries(LineSeries, { color: colors.bbLine, lineWidth: 1, priceScaleId: 'right', ...quiet }));
       lower.setData(toData(bb.lower));
       const upLast = last(bb.upper.map((p) => p.y));
       const midLast = last(bb.middle.map((p) => p.y));
@@ -1034,7 +1384,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       const cfg = [...indicators.smaLines, ...indicators.emaLines].find((l) => l.id === id);
       const maCfg = allMas.find((m) => m.id === id);
       const s = track(chart.addSeries(LineSeries, {
-        color: cfg?.color ?? COLORS.sma, lineWidth: (cfg?.width ?? 1) as 1 | 2 | 3 | 4, ...quiet,
+        color: cfg?.color ?? COLORS.sma, lineWidth: (cfg?.width ?? 1) as 1 | 2 | 3 | 4, priceScaleId: 'right', ...quiet,
       }));
       s.setData(pts.map((p) => ({ time: sec(p.time), value: p.value })));
       const maLast = pts.length ? pts[pts.length - 1]!.value : null;
@@ -1078,7 +1428,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
           // blanco hueso salvo color personalizado en el modal.
           const htfColor = resolveHtfColor({ color: cfg?.color, customColor: cfg?.customColor });
           const s = track(chartRef.current.addSeries(LineSeries, {
-            color: htfColor, lineWidth: (cfg?.width ?? 1) as 1 | 2 | 3 | 4, ...quiet,
+            color: htfColor, lineWidth: (cfg?.width ?? 1) as 1 | 2 | 3 | 4, priceScaleId: 'right', ...quiet,
           }));
           s.setData(pts.map((p) => ({ time: sec(p.time), value: p.value })));
           const htfLast = pts.length ? pts[pts.length - 1]! : null;
@@ -1195,6 +1545,13 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
 
     if (indicators.stochRsi || indicators.rsiEnabled) {
       const m = slot('osc');
+      // Fondo negro solido del slot (estilo TV): tapa lo que sangre detras.
+      // Stoch/RSI van de 0 a 100, asi el techo siempre cubre sin distorsionar.
+      const oscBg = track(chart.addSeries(AreaSeries, {
+        topColor: COLORS.bg, bottomColor: COLORS.bg, lineColor: 'rgba(0,0,0,0)',
+        lineWidth: 1, priceScaleId: 'osc', ...quiet,
+      }));
+      oscBg.setData(times.map((t) => ({ time: t, value: 100 })));
       if (indicators.stochRsi) {
         const stoch = calculateStochRSI(legacy, 14, 14, 3, 3);
         const toData = (pts: { x: number; y: number | null }[]) =>
@@ -1214,6 +1571,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
           chips.push({ color: colors.stochK, text: `Stoch ${kLast.toFixed(1)}/${dLast.toFixed(1)}` });
           pl.stoch = { k: kLast, d: dLast };
         }
+        stochArrRef.current = { k: stoch.k, d: stoch.d };
         // Niveles 80/20 punteados como la app.
         for (const lv of [80, 20]) {
           const s = track(chart.addSeries(LineSeries, {
@@ -1241,6 +1599,8 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
           });
           pl.rsi = { v: rsiLast, ma: rsiMaLast };
         }
+        rsiArrRef.current = rsi;
+        rsiMaArrRef.current = rsiMa;
         // Niveles 70/30 punteados como la app.
         for (const lv of [70, 30]) {
           const s = track(chart.addSeries(LineSeries, {
@@ -1249,7 +1609,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
           s.setData(toLineData([{ time: times[0]!, value: lv }, { time: times[times.length - 1]!, value: lv }]));
         }
         const signal = track(chart.addSeries(LineSeries, {
-          color: COLORS.neutral, lineWidth: 1, priceScaleId: 'osc', ...quiet,
+          color: RSI_MA_COLOR, lineWidth: 2, priceScaleId: 'osc', ...quiet,
         }));
         signal.setData(
           rsiMa.map((v, i) => ({ time: times[i]!, value: v })).filter((p) => p.value > 0),
@@ -1269,6 +1629,18 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
         ? precisionForValue(Math.max(Math.abs(difLast), Math.abs(deaLast), Math.abs(histLast)))
         : 4;
       const macdFmt = { type: 'price', precision: p, minMove: 1 / 10 ** p } as const;
+      // Fondo negro solido del slot (estilo TV): techo = maximo del slot.
+      let macdTop = 0;
+      for (const pairs of [macd.dif, macd.dea, macd.hist]) {
+        for (const [, v] of pairs) {
+          if (Number.isFinite(v)) macdTop = Math.max(macdTop, Math.abs(v));
+        }
+      }
+      const macdBg = track(chart.addSeries(AreaSeries, {
+        topColor: COLORS.bg, bottomColor: COLORS.bg, lineColor: 'rgba(0,0,0,0)',
+        lineWidth: 1, priceScaleId: 'macd', priceFormat: macdFmt, ...quiet,
+      }));
+      macdBg.setData(times.map((t) => ({ time: t, value: macdTop })));
       const hist = track(chart.addSeries(HistogramSeries, { priceScaleId: 'macd', priceFormat: macdFmt }));
       hist.priceScale().applyOptions({ scaleMargins: m });
       hist.setData(macd.hist.map(([i, v]) => ({
@@ -1287,8 +1659,9 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
           color: MACD_DIF_COLOR,
           text: `MACD ${difLast.toFixed(p)}/${deaLast.toFixed(p)}/${histLast.toFixed(p)}`,
         });
-        pl.macd = { hist: histLast, dif: difLast, dea: deaLast, p };
-      }
+          pl.macd = { hist: histLast, dif: difLast, dea: deaLast, p };
+        }
+        macdArrRef.current = macd;
     }
 
     // Marcadores: divergencias RSI + señales + tags SMC.
@@ -1408,64 +1781,31 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
         }
       }
     }
-    // Fibos y dibujos guardados por simbolo (anclados por tiempo).
+    // Fibos guardados por simbolo: el overlay SVG los pinta (ver
+    // refreshFibLines); aqui solo se migran anclas y etiquetas.
     const candlesApi = candleRef.current;
     if (candlesApi && data.length) {
       const firstT = sec(data[0]!.time);
-      const lastT = sec(data[data.length - 1]!.time);
       const w = (width: number): 1 | 2 | 3 | 4 =>
         Math.min(Math.max(Math.round(width), 1), 4) as 1 | 2 | 3 | 4;
-      const paintSingleFib = (fib: FibOverlay) => {
-        const olds = fibSeriesRef.current.get(fib.id) ?? [];
-        for (const s of olds) {
-          try {
-            chart.removeSeries(s);
-          } catch {
-            // ya removida
-          }
-          overlaysRef.current = overlaysRef.current.filter((o) => o !== s);
-          colorKeysRef.current.delete(s);
+      // Auto-repara fibos viejos con anclas fuera de grilla (una sola
+      // re-grabada; despues es no-op): sin esto churnean la escala y la vista
+      // se mueve sola al arrastrar o borrar.
+      const storedFibs = loadFibOverlays(symbol);
+      const migrated = snapFibOverlaysToGrid(storedFibs, data, FUTURE_PAD_BARS);
+      if (migrated.changed) {
+        try {
+          saveFibOverlays(symbol, migrated.list);
+        } catch {
+          // persiste en el proximo cambio
         }
-        const created: AnySeries[] = [];
-        const localTrack = (s: AnySeries): AnySeries => {
-          created.push(s);
-          overlaysRef.current.push(s);
-          return s;
-        };
-        const t0 = sec(fib.start.time);
-        const t1 = sec(fib.end.time);
-        // Solo niveles como segmentos A -> B (la app no pinta diagonal base);
-        // el 0 va en el punto final (convencion de la app).
-        const endT = t1 >= t0 ? t1 : t0;
-        const defs: { fibId: string; time: UTCTimestamp; price: number; text: string; color: string }[] = [];
-        for (const ratio of levelsSorted(fib)) {
-          const price = fibLevelPrice(fib.end.price, fib.start.price, ratio);
-          const s = localTrack(chart.addSeries(LineSeries, {
-            color: fib.colorHex, lineWidth: w(fib.width), ...quiet,
-          }));
-          s.setData(toLineData([
-            { time: t0, value: price },
-            { time: t1, value: price },
-          ]));
-          defs.push({
-            fibId: fib.id,
-            time: endT,
-            price,
-            text: `${trimRatio(ratio)} (${formatAxisPrice(price, refClose, ext)})`,
-            color: fib.colorHex,
-          });
-        }
-        fibSeriesRef.current.set(fib.id, created);
-        fibDefsRef.current = [
-          ...fibDefsRef.current.filter((d) => d.fibId !== fib.id),
-          ...defs,
-        ];
-      };
-      fibPainterRef.current = paintSingleFib;
-      const visibleFibs = loadFibOverlays(symbol).filter((f) => !f.hidden);
-      fibListRef.current = loadFibOverlays(symbol);
-      for (const fib of visibleFibs) paintSingleFib(fib);
+      }
+      fibListRef.current = migrated.list;
+      for (const fib of migrated.list.filter((f) => !f.hidden)) syncFibDefs(fib);
+      refreshFibLines();
       refreshFibLabels();
+      // Fin del area con puntos (incluye el pad futuro): LINE/RAY/H parten de ahi.
+      const padEnd = futurePadEnd(data) ?? data[data.length - 1]!.time;
       const slopeLine = (t0: number, p0: number, t1: number, p1: number, color: string, width: number, at0: number, at1: number) => {
         const slope = t1 === t0 ? 0 : (p1 - p0) / (t1 - t0);
         const s = track(chart.addSeries(LineSeries, { color, lineWidth: w(width), ...quiet }));
@@ -1494,10 +1834,10 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
             break;
           }
           case 'LINE':
-            slopeLine(t0, p0, t1, p1, d.colorHex, d.width, data[0]!.time, data[data.length - 1]!.time);
+            slopeLine(t0, p0, t1, p1, d.colorHex, d.width, data[0]!.time, padEnd);
             break;
           case 'RAY':
-            slopeLine(t0, p0, t1, p1, d.colorHex, d.width, t0, data[data.length - 1]!.time);
+            slopeLine(t0, p0, t1, p1, d.colorHex, d.width, t0, padEnd);
             break;
           case 'H_SEGMENT': {
             const s = track(chart.addSeries(LineSeries, { color: d.colorHex, lineWidth: w(d.width), ...quiet }));
@@ -1506,12 +1846,12 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
           }
           case 'H_LINE': {
             const s = track(chart.addSeries(LineSeries, { color: d.colorHex, lineWidth: w(d.width), ...quiet }));
-            s.setData([{ time: firstT, value: p0 }, { time: lastT, value: p0 }]);
+            s.setData([{ time: firstT, value: p0 }, { time: sec(padEnd), value: p0 }]);
             break;
           }
           case 'H_RAY': {
             const s = track(chart.addSeries(LineSeries, { color: d.colorHex, lineWidth: w(d.width), ...quiet }));
-            s.setData(toLineData([{ time: sec(t0), value: p0 }, { time: lastT, value: p0 }]));
+            s.setData(toLineData([{ time: sec(t0), value: p0 }, { time: sec(padEnd), value: p0 }]));
             break;
           }
           case 'RECT': {
@@ -1564,6 +1904,10 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
 
     setChips(chips);
     setPaneLegends(pl);
+    paneLastRef.current = pl;
+    hoverPaneIdxRef.current = null;
+    // Los margenes de velas se reafirman al final (con todas las series ya
+    // creadas) para que ningun orden raro los deje sin efecto.
     try {
       markersRef.current?.setMarkers(markers.sort((a, b) => Number(a.time) - Number(b.time)));
     } catch {
@@ -1573,7 +1917,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     return () => {
       cancelled = true;
     };
-  }, [indicators, status, symbol, interval, tick, overlaysTick, refreshFibLabels, refreshMaTags]);
+  }, [indicators, status, symbol, interval, tick, overlaysTick, refreshFibLabels, refreshFibLines, refreshMaTags, syncFibDefs]);
 
   // Polling 5s: parchea la ultima vela o agrega la nueva.
   useEffect(() => {
@@ -1595,12 +1939,18 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
           if (c.time === lastLocal.time) Object.assign(lastLocal, c);
           else if (c.time > lastLocal.time) {
             data.push(c);
-            const max = intervalBarCount(interval);
-            if (data.length > max + 1) data.shift();
+            if (data.length > HISTORY_HARD_CAP) data.splice(0, data.length - HISTORY_HARD_CAP);
             appended = true;
           }
         }
-        if (appended) setTick((t) => t + 1);
+        if (appended) {
+          try {
+            candles.setData(candleDisplayData(data));
+          } catch {
+            // serie en reconstruccion: el proximo tick reintenta
+          }
+          setTick((t) => t + 1);
+        }
         const last = data[data.length - 1]!;
         candles.update({ time: sec(last.time), open: last.open, high: last.high, low: last.low, close: last.close });
       } catch {
@@ -1626,10 +1976,17 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
 
   useEffect(() => {
     if (resetSignal > 0) {
-      try {
-        chartRef.current?.timeScale().resetTimeScale();
-      } catch {
-        // chart aun no creado
+      // Rango explicito (no resetTimeScale): el pad futuro no debe encogerse a la vista.
+      const data = candlesRef.current;
+      if (data.length) {
+        try {
+          chartRef.current?.timeScale().setVisibleLogicalRange({
+            from: Math.max(0, data.length - INITIAL_VISIBLE_BARS),
+            to: data.length + INITIAL_RIGHT_OFFSET_BARS,
+          });
+        } catch {
+          // chart aun no creado
+        }
       }
       try {
         chartRef.current?.priceScale('right').setAutoScale(true);
@@ -1642,7 +1999,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
   const pending = pendingRef.current;
   let pendingDot: { left: number; top: number } | null = null;  if (pending && drawStep === 1 && chartRef.current && candleRef.current && containerRef.current) {
     try {
-      const x = chartRef.current.timeScale().timeToCoordinate(sec(pending.time));
+      const x = xAtTimeMs(chartRef.current, pending.time);
       const y = candleRef.current.priceToCoordinate(pending.price);
       if (typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y)) {
         pendingDot = { left: x, top: y };
@@ -1661,21 +2018,33 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     if (!symbol || !selectedFib) return;
     const next = loadFibOverlays(symbol).map((f) => (f.id === selectedFib.id ? { ...f, ...patch } : f));
     saveFibOverlays(symbol, next.slice(-10));
-    setTick((t) => t + 1);
-    useMarketStore.getState().bumpOverlays();
+    // Solo overlay: re-deriva sin reconstruir el chart (la vista no se mueve).
+    fibListRef.current = next;
+    const patched = next.find((f) => f.id === selectedFib.id);
+    if (patched && !patched.hidden) syncFibDefs(patched);
+    else fibDefsRef.current = fibDefsRef.current.filter((d) => d.fibId !== selectedFib.id);
+    refreshFibLines();
+    refreshFibLabels();
   };
 
   const deleteSelectedFib = () => {
     if (!symbol || !selectedFib) return;
-    saveFibOverlays(symbol, loadFibOverlays(symbol).filter((f) => f.id !== selectedFib.id));
+    const next = loadFibOverlays(symbol).filter((f) => f.id !== selectedFib.id);
+    saveFibOverlays(symbol, next);
     setSelectedFibId(null);
     setFibSettingsOpen(false);
     if (hoverIdRef.current === selectedFib.id) {
       hoverIdRef.current = null;
       setHoverFibId(null);
     }
-    setTick((t) => t + 1);
-    useMarketStore.getState().bumpOverlays();
+    // Solo overlay: sin sus numeros y con la vista donde estaba.
+    fibDefsRef.current = fibDefsRef.current.filter((d) => d.fibId !== selectedFib.id);
+    fibListRef.current = next;
+    setFibBarPos((prev) => Object.fromEntries(
+      Object.entries(prev).filter(([id]) => id !== selectedFib.id),
+    ));
+    refreshFibLines();
+    refreshFibLabels();
   };
 
   const toggleSelectedLevel = (ratio: number) => {
@@ -1692,15 +2061,19 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     const bar = e.currentTarget.closest('.fib-selected-bar') as HTMLElement | null;
     const parent = bar?.parentElement?.getBoundingClientRect();
     const rect = bar?.getBoundingClientRect();
-    if (!rect || !parent) return;
+    // selectedFib (no solo selectedFibId): la barra ya es visible por hover
+    // antes de que el efecto fije el id.
+    const fibId = selectedFib?.id;
+    if (!rect || !parent || !fibId) return;
     const origX = rect.left - parent.left;
     const origY = rect.top - parent.top;
     barDragRef.current = { startX: e.clientX, startY: e.clientY, origX, origY };
-    setFibBarPos({ x: origX, y: origY });
+    setFibBarPos((prev) => ({ ...prev, [fibId]: { x: origX, y: origY } }));
     const move = (ev: MouseEvent) => {
       const d = barDragRef.current;
       if (!d) return;
-      setFibBarPos({ x: d.origX + ev.clientX - d.startX, y: Math.max(0, d.origY + ev.clientY - d.startY) });
+      const pos = { x: d.origX + ev.clientX - d.startX, y: Math.max(0, d.origY + ev.clientY - d.startY) };
+      setFibBarPos((prev) => ({ ...prev, [fibId]: pos }));
     };
     const up = () => {
       barDragRef.current = null;
@@ -1725,15 +2098,50 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     return (1 - paneReserved + i * h + 0.01) * 100;
   };
 
+  // Barra flotante sobre el fibo seleccionado (estilo TV): nace arriba del
+  // dibujo y se recoge dentro del contenedor. El arrastre manual la fija
+  // por fibo y se recuerda al reseleccionar.
+  const manualBarPos = selectedFib ? fibBarPos[selectedFib.id] : undefined;
+  let fibBarAuto: { x: number; y: number } | null = null;
+  if (selectedFib && !manualBarPos && chartRef.current && candleRef.current && containerRef.current) {
+    try {
+      const ax = xAtTimeMs(chartRef.current, selectedFib.start.time);
+      const bx = xAtTimeMs(chartRef.current, selectedFib.end.time);
+      const ay = candleRef.current.priceToCoordinate(selectedFib.start.price);
+      const by = candleRef.current.priceToCoordinate(selectedFib.end.price);
+      if (
+        typeof ax === 'number' && typeof bx === 'number' &&
+        typeof ay === 'number' && typeof by === 'number' &&
+        [ax, bx, ay, by].every((v) => Number.isFinite(v))
+      ) {
+        const W = containerRef.current.clientWidth || 0;
+        const H = containerRef.current.clientHeight || 500;
+        const midX = (ax + bx) / 2;
+        const topY = Math.min(ay, by);
+        fibBarAuto = {
+          x: Math.min(Math.max(midX - 160, 8), Math.max(8, W - 330)),
+          y: Math.min(Math.max(topY - 56, 8), Math.max(8, H - 60)),
+        };
+      }
+    } catch {
+      fibBarAuto = null;
+    }
+  }
+  const fibBarStyle = manualBarPos
+    ? { left: manualBarPos.x, top: manualBarPos.y, transform: 'none' as const }
+    : fibBarAuto
+      ? { left: fibBarAuto.x, top: fibBarAuto.y, transform: 'none' as const }
+      : undefined;
+
   return (
     <div className="lw-chart">
       <FloatDrawBar />
-      {selectedFib && (
+      {selectedFib && !dragView && (
         <div
           className="fib-selected-bar"
           role="toolbar"
           aria-label="Opciones del fibo seleccionado"
-          style={fibBarPos ? { left: fibBarPos.x, top: fibBarPos.y, transform: 'none' } : undefined}
+          style={fibBarStyle}
         >
           <span
             className="fib-bar-handle"
@@ -1748,7 +2156,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
             </svg>
           </span>
           <label className="fib-bar-btn" title="Color del fibo">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <path d="M9.5 12.5l7-7a2.1 2.1 0 013 3l-7 7-3.5.5z" />
               <path d="M4 20h16" strokeWidth="3" stroke="currentColor" style={{ color: selectedFib.colorHex }} />
             </svg>
@@ -1779,7 +2187,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
             aria-label="Niveles del fibo"
             onClick={() => setFibSettingsOpen(true)}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <circle cx="12" cy="12" r="3" />
               <path d="M19.4 15a1.7 1.7 0 00.3 1.9l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.9-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1-1.6 1.7 1.7 0 00-1.9.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.9 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.6-1 1.7 1.7 0 00-.3-1.9l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.9.3h.1a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.9-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.9v.1a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z" />
             </svg>
@@ -1792,7 +2200,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
             aria-pressed={selectedFib.locked}
             onClick={() => patchSelectedFib({ locked: !selectedFib.locked })}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <rect x="4" y="11" width="16" height="10" rx="2" />
               <path d={selectedFib.locked ? 'M8 11V7a4 4 0 018 0v4' : 'M8 11V7a4 4 0 017.8-1.3'} />
             </svg>
@@ -1804,7 +2212,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
             aria-label="Borrar fibo"
             onClick={deleteSelectedFib}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <polyline points="3 6 5 6 21 6" />
               <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
             </svg>
@@ -1823,7 +2231,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
               }
             }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" />
             </svg>
           </button>
@@ -1924,9 +2332,9 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
           aria-live="polite"
         >
           <span style={{ color: indicators.colors.rsi }}>RSI: {paneLegends.rsi.v.toFixed(2)}</span>{' '}
-          {paneLegends.rsi.ma != null && (
-            <span style={{ color: COLORS.neutral }}>MA: {paneLegends.rsi.ma.toFixed(2)}</span>
-          )}
+            {paneLegends.rsi.ma != null && (
+              <span style={{ color: RSI_MA_COLOR }}>MA: {paneLegends.rsi.ma.toFixed(2)}</span>
+            )}
         </div>
       )}
       {paneLegends?.macd != null && (
@@ -1937,12 +2345,86 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
           <span style={{ color: MACD_DEA_COLOR }}>DEA {paneLegends.macd.dea.toFixed(paneLegends.macd.p)}</span>
         </div>
       )}
+      {(fibLines.length > 0 || ghostFib) && (
+        <svg className="fib-lines-svg" aria-hidden="true">
+          {fibLines.map((l, i) => (
+            <line
+              key={`${l.fibId}-${i}`}
+              x1={l.x1}
+              y1={l.y1}
+              x2={l.x2}
+              y2={l.y2}
+              stroke={l.color}
+              strokeOpacity={l.dimmed ? 0.35 : 1}
+              strokeWidth={l.width}
+              strokeLinecap="round"
+              className="fib-level-line"
+            />
+          ))}
+          {ghostFib && (() => {
+            const g = ghostFib;
+            const W = containerRef.current?.clientWidth || 0;
+            const H = containerRef.current?.clientHeight || 500;
+            const stroke = 'rgba(255,255,255,0.65)';
+            const dx = g.bx - g.ax;
+            const dy = g.by - g.ay;
+            const hline = (y: number, x1: number, x2: number, key: string) => (
+              <line key={key} x1={x1} y1={y} x2={x2} y2={y} stroke={stroke} strokeWidth={1} className="fib-ghost-line" />
+            );
+            const seg = (x1: number, y1: number, x2: number, y2: number, key: string) => (
+              <line key={key} x1={x1} y1={y1} x2={x2} y2={y2} stroke={stroke} strokeWidth={1} className="fib-ghost-line" />
+            );
+            // Proyeccion al borde para rectas (igual que el pintado final).
+            const rayTo = (xEdge: number): { x: number; y: number } => {
+              if (Math.abs(dx) < 0.5) return { x: g.ax, y: g.by };
+              const t = (xEdge - g.ax) / dx;
+              return { x: xEdge, y: g.ay + t * dy };
+            };
+            switch (g.tool) {
+              case 'FIBO':
+                return (<>{DEFAULT_FIB_LEVELS.map((ratio) => hline(g.by + (g.ay - g.by) * ratio, g.ax, g.bx, `ghost-${ratio}`))}</>);
+              case 'LINE': {
+                if (Math.abs(dx) < 0.5) return seg(g.ax, 0, g.ax, H, 'ghost-v');
+                const p0 = rayTo(0);
+                const p1 = rayTo(W);
+                return seg(p0.x, p0.y, p1.x, p1.y, 'ghost-line');
+              }
+              case 'RAY': {
+                const p = rayTo(dx >= 0 ? W : 0);
+                return seg(g.ax, g.ay, p.x, p.y, 'ghost-ray');
+              }
+              case 'ARROW': {
+                const a = Math.atan2(dy, dx);
+                const s = 10;
+                const head = `${g.bx},${g.by} ${g.bx - s * Math.cos(a - 0.42)},${g.by - s * Math.sin(a - 0.42)} ${g.bx - s * Math.cos(a + 0.42)},${g.by - s * Math.sin(a + 0.42)}`;
+                return (<>{seg(g.ax, g.ay, g.bx, g.by, 'ghost-arrow')}<polygon key="ghost-head" points={head} fill={stroke} className="fib-ghost-line" /></>);
+              }
+              case 'H_SEGMENT':
+                return hline(g.ay, g.ax, g.bx, 'ghost-hseg');
+              case 'H_LINE':
+                return hline(g.ay, 0, W, 'ghost-hline');
+              case 'H_RAY':
+                return hline(g.ay, g.ax, dx >= 0 ? W : 0, 'ghost-hray');
+              case 'RECT':
+                return (<rect key="ghost-rect" x={Math.min(g.ax, g.bx)} y={Math.min(g.ay, g.by)} width={Math.max(Math.abs(dx), 1)} height={Math.max(Math.abs(dy), 1)} fill="none" stroke={stroke} strokeWidth={1} className="fib-ghost-line" />);
+              case 'CIRCLE':
+                return (<ellipse key="ghost-circle" cx={(g.ax + g.bx) / 2} cy={(g.ay + g.by) / 2} rx={Math.max(Math.abs(dx) / 2, 1)} ry={Math.max(Math.abs(dy) / 2, 1)} fill="none" stroke={stroke} strokeWidth={1} className="fib-ghost-line" />);
+              case 'TRIANGLE':
+                return (<polygon key="ghost-tri" points={`${g.ax},${g.ay} ${g.bx},${g.by} ${g.ax},${g.by}`} fill="none" stroke={stroke} strokeWidth={1} className="fib-ghost-line" />);
+              case 'PRICE_LINE':
+                return hline(g.by, 0, W, 'ghost-price');
+              default:
+                return seg(g.ax, g.ay, g.bx, g.by, 'ghost-seg');
+            }
+          })()}
+        </svg>
+      )}
       {fibLabels.length > 0 && (
         <div className="fib-labels" aria-hidden="true">
           {fibLabels.map((label, i) => (
             <span
               key={i}
-              className="fib-label fib-label-end"
+              className={label.after ? 'fib-label' : 'fib-label fib-label-end'}
               style={{ top: label.top, left: label.left, color: label.color }}
             >
               {label.text}
@@ -2026,7 +2508,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
         const locked = fibListRef.current.find((x) => x.id === active.id)?.locked ?? false;
         for (const anchor of [active.start, active.end]) {
           try {
-            const x = chartRef.current.timeScale().timeToCoordinate(sec(anchor.time));
+            const x = xAtTimeMs(chartRef.current, anchor.time);
             const y = candleRef.current.priceToCoordinate(anchor.price);
             if (typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y)) {
               dots.push({ left: x, top: y, locked });
@@ -2049,6 +2531,28 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
           {drawStep === 0 ? 'Toca el primer punto' : 'Toca el segundo punto'} · {indicators.drawTool === 'FIBO' ? 'Fibo' : indicators.drawTool}
         </div>
       )}
+      <div className="lw-tz">
+        {historyLoading && <span className="lw-tz-loading">Cargando historia…</span>}
+        <span className="lw-tz-clock" aria-hidden="true">
+          {formatClockInZone(nowMs, tz)} {zoneOffsetLabel(tz, nowMs)}
+        </span>
+        <select
+          className="lw-tz-select"
+          value={tz}
+          onChange={(e) => {
+            const v = e.target.value;
+            setTz(v);
+            writeChartTimezone(v);
+          }}
+          aria-label="Zona horaria del chart"
+        >
+          {CHART_TIMEZONES.map((z) => (
+            <option key={z} value={z}>
+              {zoneOffsetLabel(z, nowMs)} {zoneShortName(z)}
+            </option>
+          ))}
+        </select>
+      </div>
       <div ref={containerRef} className="lw-container" />
       {status === 'loading' && <div className="chart-empty-state"><p>Cargando gráfica…</p></div>}
       {status === 'empty' && (

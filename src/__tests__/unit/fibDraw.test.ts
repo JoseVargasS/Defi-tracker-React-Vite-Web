@@ -6,7 +6,9 @@ import {
   hexWithAlpha,
   hitFibOverlay,
   levelsSorted,
+  moveFibOverlay,
   pointToSegmentPx,
+  snapFibOverlaysToGrid,
   timeToIndex,
   trimRatio,
   type FibOverlay,
@@ -97,6 +99,48 @@ describe('fib hit testing', () => {
 
   it('skips hidden overlays', () => {
     expect(hitFibOverlay([{ ...overlay, hidden: true }], { x: 1500, y: 150 }, (t) => t, (p) => p, 8)).toBeNull();
+  });
+
+  it('moves the whole fibo preserving its shape', () => {
+    const moved = moveFibOverlay(overlay, 500, -10);
+    expect(moved.start).toEqual({ time: 1500, price: 90 });
+    expect(moved.end).toEqual({ time: 2500, price: 190 });
+    expect(moved.id).toBe('f1');
+    expect(moved.enabledLevels).toEqual(overlay.enabledLevels);
+  });
+
+  it('snaps off-grid anchors without touching on-grid ones', () => {
+    const candles = [60000, 120000, 180000].map((time) => ({ time }));
+    const off = { ...fib(), start: { time: 61000, price: 100 }, end: { time: 200000, price: 200 } };
+    const { list, changed } = snapFibOverlaysToGrid([off], candles, 500);
+    expect(changed).toBe(true);
+    expect(list[0]!.start.time).toBe(60000);
+    expect(list[0]!.end.time).toBe(180000);
+    expect(list[0]!.start.price).toBe(100);
+  });
+
+  it('leaves on-grid fibos untouched', () => {
+    const candles = [60000, 120000, 180000].map((time) => ({ time }));
+    const on = { ...fib(), start: { time: 60000, price: 100 }, end: { time: 120000, price: 200 } };
+    const { list, changed } = snapFibOverlaysToGrid([on], candles, 500);
+    expect(changed).toBe(false);
+    expect(list[0]).toBe(on);
+  });
+
+  it('clamps past and future anchors', () => {
+    const candles = [60000, 120000, 180000].map((time) => ({ time }));
+    const wild = { ...fib(), start: { time: -999, price: 100 }, end: { time: 10 ** 12, price: 200 } };
+    const { list, changed } = snapFibOverlaysToGrid([wild], candles, 10);
+    expect(changed).toBe(true);
+    expect(list[0]!.start.time).toBe(60000);
+    expect(list[0]!.end.time).toBe(180000 + 10 * 60000);
+  });
+
+  it('passes through with short data', () => {
+    const original = fib();
+    const { list, changed } = snapFibOverlaysToGrid([original], [{ time: 1 }], 500);
+    expect(changed).toBe(false);
+    expect(list[0]).toBe(original);
   });
 
   it('dims hex colors with alpha', () => {

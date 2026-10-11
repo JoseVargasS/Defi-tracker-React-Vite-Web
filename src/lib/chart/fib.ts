@@ -72,6 +72,46 @@ export function hitFibOverlay(
   return null;
 }
 
+// Mueve el fibo completo conservando su forma (trasladar el cuerpo).
+export function moveFibOverlay(fib: FibOverlay, dtMs: number, dp: number): FibOverlay {
+  return {
+    ...fib,
+    start: { time: fib.start.time + dtMs, price: fib.start.price + dp },
+    end: { time: fib.end.time + dtMs, price: fib.end.price + dp },
+  };
+}
+
+// Lleva anclas a la grilla de velas (magnet): fibos viejos con tiempos
+// arbitrarios churnean los puntos de la escala y mueven la vista sola al
+// arrastrar o borrar. Idempotente: ya saneado devuelve changed=false.
+export function snapFibOverlaysToGrid(
+  overlays: FibOverlay[],
+  candles: readonly { time: number }[],
+  padBars: number,
+): { list: FibOverlay[]; changed: boolean } {
+  if (candles.length < 2) return { list: overlays, changed: false };
+  const first = candles[0]!.time;
+  const step = candles[candles.length - 1]!.time - candles[candles.length - 2]!.time;
+  if (!Number.isFinite(first) || !Number.isFinite(step) || step <= 0) {
+    return { list: overlays, changed: false };
+  }
+  const maxIdx = candles.length - 1 + Math.max(0, Math.floor(padBars));
+  let changed = false;
+  const list = overlays.map((f) => {
+    const snapOne = (t: number): number => {
+      if (!Number.isFinite(t)) return t;
+      const idx = Math.min(Math.max(Math.round((t - first) / step), 0), maxIdx);
+      return first + idx * step;
+    };
+    const s = snapOne(f.start.time);
+    const e = snapOne(f.end.time);
+    if (s === f.start.time && e === f.end.time) return f;
+    changed = true;
+    return { ...f, start: { ...f.start, time: s }, end: { ...f.end, time: e } };
+  });
+  return { list, changed };
+}
+
 // #RRGGBB con alpha para atenuar fibos no hovereados (seleccionado a full, resto tenues).
 export function hexWithAlpha(hex: string, alpha: number): string | null {
   const m = /^#([0-9a-fA-F]{6})$/.exec(hex.trim());
