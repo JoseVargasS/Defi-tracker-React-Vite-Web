@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useMarketStore } from '@/store/useMarketStore';
 import { CHART_INTERVALS } from '@/lib/config';
 import type { ChartHandle } from '@/components/market/CandlestickChart';
-import type { DrawTool, MaLineConfig, SmcToggles } from '@/lib/chart/types';
-import { drawKindLabel, isDrawKind, type DrawKind } from '@/lib/chart/draw';
+import type { MaLineConfig, SmcToggles } from '@/lib/chart/types';
+import { drawKindLabel } from '@/lib/chart/draw';
 import { loadDrawOverlays, loadFibOverlays, saveDrawOverlays, saveFibOverlays } from '@/lib/chart/overlays';
 import { PulsePanel } from '@/components/market/PulsePanel';
 
@@ -127,11 +127,6 @@ const SMC_ROWS: { key: keyof SmcToggles; label: string }[] = [
   { key: 'confluence', label: 'Confluencia HTF' },
 ];
 
-const DRAW_KINDS: DrawKind[] = [
-  'SEGMENT', 'LINE', 'RAY', 'ARROW', 'H_SEGMENT', 'H_LINE', 'H_RAY',
-  'RECT', 'CIRCLE', 'TRIANGLE', 'PRICE_LINE',
-];
-
 function FibDrawModal({ symbol, onClose }: { symbol: string | null; onClose: () => void }) {
   const bumpOverlays = useMarketStore((s) => s.bumpOverlays);
   const [tick, setTick] = useState(0);
@@ -219,18 +214,15 @@ export function ChartToolbar({ chartRef, measureActive, onMeasureActiveChange, o
   const addSmaLine = useMarketStore((s) => s.addSmaLine);
   const removeSmaLine = useMarketStore((s) => s.removeSmaLine);
   const setEmaLine = useMarketStore((s) => s.setEmaLine);
-  const addEmaLine = useMarketStore((s) => s.addEmaLine);
   const removeEmaLine = useMarketStore((s) => s.removeEmaLine);
   const setRsiEnabled = useMarketStore((s) => s.setRsiEnabled);
   const setRsiPeriod = useMarketStore((s) => s.setRsiPeriod);
   const setIndicatorColor = useMarketStore((s) => s.setIndicatorColor);
   const setSmcToggle = useMarketStore((s) => s.setSmcToggle);
-  const setDrawTool = useMarketStore((s) => s.setDrawTool);
   const currentPair = useMarketStore((s) => s.currentPair);
 
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
-  const [smaModalOpen, setSmaModalOpen] = useState(false);
-  const [emaModalOpen, setEmaModalOpen] = useState(false);
+  const [maModalOpen, setMaModalOpen] = useState(false);
   const [smcModalOpen, setSmcModalOpen] = useState(false);
   const [drawsModalOpen, setDrawsModalOpen] = useState(false);
   const [pulseOpen, setPulseOpen] = useState(false);
@@ -253,8 +245,19 @@ export function ChartToolbar({ chartRef, measureActive, onMeasureActiveChange, o
     return () => document.removeEventListener("mousedown", handler);
   }, [colorPickerOpen]);
 
-  const smaEnabled = chartIndicators.smaLines.some((l) => l.enabled);
-  const emaEnabled = chartIndicators.emaLines.some((l) => l.enabled);
+  const maEnabled = chartIndicators.smaLines.some((l) => l.enabled) ||
+    chartIndicators.emaLines.some((l) => l.enabled);
+  // Un solo modal MA: cada fila elige su tipo (SMA/EMA), la linea vive en su
+  // lista original segun su id para no romper lo ya guardado.
+  const maLines = [...chartIndicators.smaLines, ...chartIndicators.emaLines];
+  const updateMaLine = (id: string, updates: Partial<Omit<MaLineConfig, 'id'>>) => {
+    if (chartIndicators.smaLines.some((l) => l.id === id)) setSmaLine(id, updates);
+    else setEmaLine(id, updates);
+  };
+  const removeMaLine = (id: string) => {
+    if (chartIndicators.smaLines.some((l) => l.id === id)) removeSmaLine(id);
+    else removeEmaLine(id);
+  };
 
   return (
     <div className="chart-controls-bar" role="toolbar" aria-label="Controles del chart">
@@ -265,7 +268,7 @@ export function ChartToolbar({ chartRef, measureActive, onMeasureActiveChange, o
         aria-label="Restablecer zoom del chart"
         onClick={onResetChart}
       >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
           <path d="M3 12a9 9 0 1 0 3-6.7"/>
           <path d="M3 4v5h5"/>
         </svg>
@@ -357,17 +360,10 @@ export function ChartToolbar({ chartRef, measureActive, onMeasureActiveChange, o
         )}
         <button
           type="button"
-          className={`chart-indicator-toggle${smaEnabled ? ' active' : ''}`}
-          onClick={() => setSmaModalOpen((v) => !v)}
+          className={`chart-indicator-toggle${maEnabled ? ' active' : ''}`}
+          onClick={() => setMaModalOpen((v) => !v)}
         >
-          SMA
-        </button>
-        <button
-          type="button"
-          className={`chart-indicator-toggle${emaEnabled ? ' active' : ''}`}
-          onClick={() => setEmaModalOpen((v) => !v)}
-        >
-          EMA
+          MA
         </button>
         <button
           type="button"
@@ -376,29 +372,6 @@ export function ChartToolbar({ chartRef, measureActive, onMeasureActiveChange, o
         >
           SMC
         </button>
-        <button
-          type="button"
-          className={`chart-indicator-toggle${chartIndicators.drawTool === 'FIBO' ? ' active' : ''}`}
-          onClick={() => setDrawTool(chartIndicators.drawTool === 'FIBO' ? null : 'FIBO')}
-          title="Toca 2 puntos del chart"
-        >
-          Fibo
-        </button>
-        <select
-          className="indicator-select"
-          value={chartIndicators.drawTool != null && chartIndicators.drawTool !== 'FIBO' ? chartIndicators.drawTool : ''}
-          onChange={(e) => {
-            const v = e.target.value;
-            const tool: DrawTool = v === '' ? null : isDrawKind(v) ? v : null;
-            setDrawTool(tool);
-          }}
-          aria-label="Herramienta de dibujo"
-        >
-          <option value="">Dibujo</option>
-          {DRAW_KINDS.map((k) => (
-            <option key={k} value={k}>{drawKindLabel(k)}</option>
-          ))}
-        </select>
         <button
           type="button"
           className="chart-indicator-toggle"
@@ -422,7 +395,7 @@ export function ChartToolbar({ chartRef, measureActive, onMeasureActiveChange, o
           aria-pressed={measureActive}
           onClick={() => onMeasureActiveChange(!measureActive)}
         >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M21.3 8.7 15.3 2.7" />
             <path d="M2.7 21.3 8.7 15.3" />
             <line x1="15.3" y1="8.7" x2="8.7" y2="15.3" />
@@ -477,24 +450,14 @@ export function ChartToolbar({ chartRef, measureActive, onMeasureActiveChange, o
         </div>
       </div>
 
-      {smaModalOpen && (
+      {maModalOpen && (
         <MaModal
-          title="SMA"
-          lines={chartIndicators.smaLines}
-          onUpdate={setSmaLine}
+          title="MA"
+          lines={maLines}
+          onUpdate={updateMaLine}
           onAdd={addSmaLine}
-          onRemove={removeSmaLine}
-          onClose={() => setSmaModalOpen(false)}
-        />
-      )}
-      {emaModalOpen && (
-        <MaModal
-          title="EMA"
-          lines={chartIndicators.emaLines}
-          onUpdate={setEmaLine}
-          onAdd={addEmaLine}
-          onRemove={removeEmaLine}
-          onClose={() => setEmaModalOpen(false)}
+          onRemove={removeMaLine}
+          onClose={() => setMaModalOpen(false)}
         />
       )}
       {smcModalOpen && (

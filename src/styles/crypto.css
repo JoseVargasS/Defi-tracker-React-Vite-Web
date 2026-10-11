@@ -354,14 +354,14 @@
 
 .interval-selector button,
 .chart-indicator-toggle {
-  height: 22px;
+  height: 24px;
   flex: 0 0 auto;
   padding: 0 6px;
   border: 0;
   border-radius: 4px;
   background: transparent;
   color: var(--ink-3);
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
@@ -382,14 +382,14 @@
 }
 
 .indicator-select {
-  height: 22px;
+  height: 24px;
   flex: 0 0 auto;
   padding: 0 6px;
   border: 0;
   border-radius: 4px;
   background: transparent;
   color: var(--ink-3);
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 500;
   cursor: pointer;
   appearance: none;
@@ -413,17 +413,15 @@
 }
 
 .chart-tool-button {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: 4px;
+  border-radius: 6px;
   background: transparent;
   color: var(--ink-3);
-  font-size: 0.74rem;
-  font-weight: 500;
   cursor: pointer;
   flex: 0 0 auto;
   transition: background 0.12s, color 0.12s;
@@ -450,12 +448,12 @@
 }
 
 .chart-mode-toggle button {
-  height: 22px;
+  height: 24px;
   padding: 0 8px;
   border: 0;
   background: transparent;
   color: var(--ink-3);
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 500;
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
@@ -518,13 +516,13 @@
 }
 .color-label {
   color: var(--ink-3);
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   font-weight: 500;
   min-width: 26px;
 }
 .color-picker-row input[type="color"] {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -598,10 +596,10 @@
   gap: 6px;
   padding: 5px 14px;
 }
-.ma-modal-check input { width: 14px; height: 14px; cursor: pointer; }
+.ma-modal-check input { width: 16px; height: 16px; cursor: pointer; }
 .ma-modal-label {
   color: var(--ink-3);
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   min-width: 34px;
 }
 .ma-modal-input {
@@ -612,14 +610,14 @@
   border-radius: 4px;
   background: var(--surface-3);
   color: var(--ink-1);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   text-align: center;
   outline: none;
 }
 .ma-modal-input:focus { border-color: var(--accent); }
 .ma-modal-color {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -631,7 +629,7 @@
   border: 0;
   color: var(--negative);
   cursor: pointer;
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   padding: 2px 4px;
   border-radius: 3px;
   opacity: 0.5;
@@ -702,14 +700,14 @@
   border-radius: 6px;
   pointer-events: none;
 }
-.lw-container { width: 100%; flex: 1 1 auto; min-height: 0; }
+.lw-container { width: 100%; flex: 1 1 auto; min-height: 0; touch-action: none; }
 .float-draw-bar {
   position: absolute;
   left: 8px;
   top: 44px;
   z-index: 6;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 2px;
   background: rgba(14, 14, 14, 0.92);
   border: 1px solid var(--border);
@@ -862,6 +860,7 @@
   pointer-events: none;
 }
 .fib-labels { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
+.fib-lines-svg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 4; pointer-events: none; }
 .fib-label {
   position: absolute;
   transform: translateY(-50%);
@@ -926,6 +925,32 @@
   border-radius: 6px;
   pointer-events: none;
 }
+.lw-tz {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+  background: rgba(0, 0, 0, 0.55);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.lw-tz-clock { pointer-events: none; white-space: nowrap; }
+.lw-tz-loading { color: var(--accent, #f2c94c); white-space: nowrap; }
+.lw-tz-select {
+  border: 0;
+  background: transparent;
+  color: var(--ink-1);
+  font-size: 0.68rem;
+  cursor: pointer;
+  max-width: 130px;
+}
+.lw-tz-select option { color: #111; }
 .pulse-modal { width: min(440px, 94vw); }
 .pulse-headline { font-size: 0.85rem; margin: 0 0 4px; }
 .pulse-headline.positive { color: var(--plPositive, #1ecb81); }

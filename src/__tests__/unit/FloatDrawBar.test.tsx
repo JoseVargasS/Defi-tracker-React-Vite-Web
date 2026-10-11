@@ -19,6 +19,17 @@ describe('FloatDrawBar', () => {
     expect(screen.getByTitle('Cursor')).toBeTruthy();
   });
 
+  it('renders all twelve draw kinds', () => {
+    const { container } = render(<FloatDrawBar />);
+    for (const title of [
+      'Fibonacci', 'Segmento', 'Línea', 'Rayo', 'Flecha', 'Segmento H',
+      'Línea H', 'Recta H', 'Rectángulo', 'Círculo', 'Triángulo', 'Línea de precio',
+    ]) {
+      expect(screen.getByTitle(title)).toBeTruthy();
+    }
+    expect(container.querySelectorAll('.float-draw-btn').length).toBe(14);
+  });
+
   it('toggles the fibo tool', () => {
     render(<FloatDrawBar />);
     fireEvent.click(screen.getByTitle('Fibonacci'));
@@ -31,6 +42,14 @@ describe('FloatDrawBar', () => {
     render(<FloatDrawBar />);
     fireEvent.click(screen.getByTitle('Rectángulo'));
     expect(useMarketStore.getState().chartIndicators.drawTool).toBe('RECT');
+  });
+
+  it('selects the new ray and circle kinds', () => {
+    render(<FloatDrawBar />);
+    fireEvent.click(screen.getByTitle('Rayo'));
+    expect(useMarketStore.getState().chartIndicators.drawTool).toBe('RAY');
+    fireEvent.click(screen.getByTitle('Círculo'));
+    expect(useMarketStore.getState().chartIndicators.drawTool).toBe('CIRCLE');
   });
 
   it('clears overlays of the pair', () => {
