@@ -1032,6 +1032,47 @@ describe('LightweightChart', () => {
       'fib_overlays_BTCUSDT',
       'f1;60000;100;3600000;110;#FFFFFF;1;0.5+1;0;0',
     );
+  it('keeps other-TF MAs live across rebuilds without removing their series', async () => {
+    chartMocks.createdSeries.length = 0;
+    const props = {
+      symbol: 'BTCUSDT',
+      interval: '1h',
+      indicators: {
+        ...indicators(),
+        smaLines: [{ id: 'sma-5', period: 5, color: '#00BCD4', enabled: true, timeframe: '5m' }],
+      },
+      overlaysTick: 0,
+      resetSignal: 0,
+    };
+    const { container, rerender } = render(<LightweightChart {...props} />);
+    const el = container.querySelector('.lw-container') as HTMLElement;
+    Object.defineProperty(el, 'clientWidth', { value: 400, configurable: true });
+    await waitFor(() => {
+      expect(screen.getByText(/C 160\.00/)).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(container.querySelectorAll('.ma-tag').length).toBe(1);
+    });
+    const { createChart } = await import('lightweight-charts');
+    const chartApi = vi.mocked(createChart).mock.results.at(-1)?.value as unknown as {
+      addSeries: ReturnType<typeof vi.fn>;
+      removeSeries: ReturnType<typeof vi.fn>;
+    };
+    const htfIdx = chartApi.addSeries.mock.calls.findIndex((c) => c[1]?.color === '#f0eeeb');
+    expect(htfIdx).toBeGreaterThanOrEqual(0);
+    const htfStub = chartMocks.createdSeries[htfIdx]!;
+    const setsBefore = htfStub.setData.mock.calls.length;
+    // Nueva vela / tick: reconstruye indicadores con la caché.
+    rerender(<LightweightChart {...props} indicators={{ ...props.indicators }} overlaysTick={1} />);
+    await waitFor(() => {
+      expect(htfStub.setData.mock.calls.length).toBeGreaterThan(setsBefore);
+    });
+    // La serie viva se actualiza, no se bota (cero parpadeo) y el tag sigue.
+    expect(chartApi.removeSeries.mock.calls.flat()).not.toContain(htfStub);
+    expect(container.querySelectorAll('.ma-tag').length).toBe(1);
+    expect(screen.getByText('SMA5 5m')).toBeTruthy();
+  });
+
     const { container } = render(<LightweightChart symbol="BTCUSDT" interval="1h" indicators={indicators()} overlaysTick={0} resetSignal={0} />);
     await waitFor(() => {
       expect(screen.getByText(/C 160\.00/)).toBeTruthy();

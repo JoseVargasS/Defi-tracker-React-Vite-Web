@@ -23,6 +23,15 @@ export function resolveHtfColor(line: { color?: string; customColor?: boolean })
   return '#f0eeeb';
 }
 
+// Throttle del refetch HTF: las velas de otro TF cambian lento, no hace
+// falta pedirlas en cada vela nueva del chart (la caché pinta sin huecos).
+export const HTF_REFRESH_MS = 60_000;
+
+export function shouldRefreshHtf(lastFetchMs: number | null | undefined, nowMs: number): boolean {
+  if (lastFetchMs == null || !Number.isFinite(lastFetchMs)) return true;
+  return nowMs - lastFetchMs >= HTF_REFRESH_MS;
+}
+
 // Anti-encimado de tags: centros ordenados por y con alto+aire minimo,
 // acotados a [minC, maxC]; si se pasa abajo, recorre todo hacia arriba.
 export function stackTagCenters(

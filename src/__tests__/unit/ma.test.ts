@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { alignExtraMa, computeMaLines, emaOf, resolveHtfColor, smaOf, stackTagCenters, type MaConfig } from '@/lib/chart/ma';
+import { alignExtraMa, computeMaLines, emaOf, resolveHtfColor, shouldRefreshHtf, smaOf, stackTagCenters, type MaConfig } from '@/lib/chart/ma';
 import type { CandleData } from '@/lib/chart/rsi';
 
 function candles(n: number, stepMs = 60_000, startClose = 100): CandleData[] {
@@ -106,5 +106,22 @@ describe('resolveHtfColor', () => {
   it('falls back to bone white', () => {
     expect(resolveHtfColor({ color: '#00BCD4' })).toBe('#f0eeeb');
     expect(resolveHtfColor({})).toBe('#f0eeeb');
+  });
+});
+
+describe('shouldRefreshHtf', () => {
+  it('refreshes without cache', () => {
+    expect(shouldRefreshHtf(null, 1_000_000)).toBe(true);
+    expect(shouldRefreshHtf(undefined, 1_000_000)).toBe(true);
+    expect(shouldRefreshHtf(NaN, 1_000_000)).toBe(true);
+  });
+
+  it('skips fresh cache to avoid refetch churn', () => {
+    expect(shouldRefreshHtf(1_000_000, 1_000_000 + 30_000)).toBe(false);
+  });
+
+  it('refreshes stale cache', () => {
+    expect(shouldRefreshHtf(1_000_000, 1_000_000 + 60_000)).toBe(true);
+    expect(shouldRefreshHtf(1_000_000, 1_000_000 + 300_000)).toBe(true);
   });
 });

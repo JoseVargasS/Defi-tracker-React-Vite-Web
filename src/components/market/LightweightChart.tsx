@@ -20,7 +20,7 @@ import { displayBase, displayPairLabel, fetchCandles, fetchCandlesBefore, fetchE
 import { fetchTakerVolumes } from '@/api/binanceFutures';
 import { calculateBollingerBands, calculateStochRSI, calculateVolumeProfile } from '@/lib/chart/indicators';
 import { calculateMacd, type MacdData } from '@/lib/chart/macd';
-import { computeMaLines, resolveHtfColor, stackTagCenters, type MaConfig } from '@/lib/chart/ma';
+import { computeMaLines, resolveHtfColor, shouldRefreshHtf, stackTagCenters, type MaConfig } from '@/lib/chart/ma';
 import { calculateRsi, rsiMaOf, toCandleList, type CandleData } from '@/lib/chart/rsi';
 import {
   detectRsiDivergences,
@@ -194,7 +194,11 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
   const macdArrRef = useRef<MacdData | null>(null);
   const paneLastRef = useRef<PaneLegends | null>(null);
   const hoverPaneIdxRef = useRef<number | null>(null);
-  const maTagsRef = useRef<{ time: number; price: number; text: string; color: string }[]>([]);
+  const maTagsRef = useRef<{ time: number; price: number; text: string; color: string; htfId?: string }[]>([]);
+  // HTF sin parpadeo: caché por símbolo|TF (pinta al toque) + series vivas
+  // que se actualizan con setData en vez de borrarse y recrearse.
+  const htfCacheRef = useRef(new Map<string, { data: CandleData[]; at: number }>());
+  const htfSeriesRef = useRef(new Map<string, AnySeries>());
   const [maTags, setMaTags] = useState<{
     tags: { left: number; top: number; text: string; color: string }[];
     leaders: { x1: number; y1: number; x2: number; y2: number; x3: number; y3: number; color: string }[];
@@ -573,6 +577,9 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     };
     let ghostQueued = false;
     let legendQueued = false;
+    // Chart nuevo: la caché HTF y las series vivas del anterior no sirven.
+    htfCacheRef.current.clear();
+    htfSeriesRef.current.clear();
     let labelsQueued = false;
     let dragQueued = false;
 
@@ -1344,7 +1351,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
         // ya removida
       }
     }
-    overlaysRef.current = [];
+    overlaysRef.current = [...keptHtf];
     colorKeysRef.current.clear();
     fibDefsRef.current = [];
     maTagsRef.current = [];
@@ -1396,7 +1403,25 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     // Leyendas dentro de cada subpanel, como la app (los chips de arriba se quedan).
     const pl: PaneLegends = {};
     const last = (values: (number | null | undefined)[]): number | null => {
+    // MAs de otro TF que se quieren: sus series vivas no se tocan (cero parpadeo).
+    const allMasEarly = maConfigs(indicators.smaLines, indicators.emaLines).filter((m) => m.visible);
+    const wantHtfIds = new Set(
+      allMasEarly.filter((m) => m.timeframe !== 'chart' && m.timeframe !== interval).map((m) => m.id),
+    );
+    const keptHtf = new Set<AnySeries>();
+    for (const [id, s] of htfSeriesRef.current) {
+      if (wantHtfIds.has(id)) keptHtf.add(s);
+      else {
+        try {
+          chart.removeSeries(s);
+        } catch {
+          // ya removida
+        }
+        htfSeriesRef.current.delete(id);
+      }
+    }
       for (let i = values.length - 1; i >= 0; i--) {
+      if (keptHtf.has(s)) continue;
         const v = values[i];
         if (typeof v === 'number' && Number.isFinite(v)) return v;
       }
@@ -1426,7 +1451,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       }
     }
 
-    const allMas = maConfigs(indicators.smaLines, indicators.emaLines).filter((m) => m.visible);
+    const allMas = allMasEarly;
     const localMas = allMas.filter((m) => m.timeframe === 'chart' || m.timeframe === interval);
     const lines = computeMaLines(data, interval, localMas, new Map());
     for (const [id, pts] of Object.entries(lines)) {
@@ -1451,49 +1476,91 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       }
     }
     refreshMaTags();
-    // MAs de otro TF: se agregan al llegar (sin tumbar lo ya pintado).
+    // MAs de otro TF: primero desde caché (sin hueco visual), el fetch solo
+    // refresca en fondo y actualiza la serie viva con setData (sin recrearla).
     const extraTfs = [...new Set(
       allMas.filter((m) => m.timeframe !== 'chart' && m.timeframe !== interval).map((m) => m.timeframe),
     )].slice(0, 3);
-    if (extraTfs.length) {
-      (async () => {
-        const extras = new Map<string, CandleData[]>();
-        for (const tf of extraTfs) {
+    // Pinta (o actualiza) las HTF con los extras dados; devuelve sus tags.
+    const paintHtf = (extras: Map<string, CandleData[]>): { time: number; price: number; text: string; color: string; htfId: string }[] => {
+      const tags: { time: number; price: number; text: string; color: string; htfId: string }[] = [];
+      const htf = computeMaLines(data, interval, allMas.filter((m) => extras.has(m.timeframe)), extras);
+      for (const [id, pts] of Object.entries(htf)) {
+        const cfg = [...indicators.smaLines, ...indicators.emaLines].find((l) => l.id === id);
+        const maCfg = allMas.find((m) => m.id === id);
+        // Otro TF: linea solida (el punteado es solo del lider al tag),
+        // blanco hueso salvo color personalizado en el modal.
+        const htfColor = resolveHtfColor({ color: cfg?.color, customColor: cfg?.customColor });
+        const width = (cfg?.width ?? 1) as 1 | 2 | 3 | 4;
+        let s = htfSeriesRef.current.get(id);
+        if (!s) {
+          s = track(chart.addSeries(LineSeries, {
+            color: htfColor, lineWidth: width, priceScaleId: 'right', ...quiet,
+          }));
+          htfSeriesRef.current.set(id, s);
+        } else {
           try {
-            const rows = await fetchCandles(symbol, tf, EXTRA_TF_LIMIT);
-            if (cancelled) return;
-            const candlesTf = toCandleList(rows);
-            if (candlesTf.length) extras.set(tf, candlesTf);
+            s.applyOptions({ color: htfColor, lineWidth: width });
           } catch {
-            // ese TF queda sin pintar
+            // serie en reconstruccion
           }
         }
-        if (cancelled || !chartRef.current) return;
-        const htf = computeMaLines(data, interval, allMas.filter((m) => extras.has(m.timeframe)), extras);
-        for (const [id, pts] of Object.entries(htf)) {
-          const cfg = [...indicators.smaLines, ...indicators.emaLines].find((l) => l.id === id);
-          const maCfg = allMas.find((m) => m.id === id);
-          // Otro TF: linea solida (el punteado es solo del lider al tag),
-          // blanco hueso salvo color personalizado en el modal.
-          const htfColor = resolveHtfColor({ color: cfg?.color, customColor: cfg?.customColor });
-          const s = track(chartRef.current.addSeries(LineSeries, {
-            color: htfColor, lineWidth: (cfg?.width ?? 1) as 1 | 2 | 3 | 4, priceScaleId: 'right', ...quiet,
-          }));
+        try {
           s.setData(pts.map((p) => ({ time: sec(p.time), value: p.value })));
-          const htfLast = pts.length ? pts[pts.length - 1]! : null;
-          if (htfLast && maCfg) {
-            maTagsRef.current.push({
-              time: htfLast.time,
-              price: htfLast.value,
-              text: `${maCfg.type}${maCfg.period} ${maCfg.timeframe}`,
-              color: htfColor,
-            });
-          }
+        } catch {
+          // serie en reconstruccion: el proximo tick reintenta
+        }
+        const htfLast = pts.length ? pts[pts.length - 1]! : null;
+        if (htfLast && maCfg) {
+          tags.push({
+            time: htfLast.time,
+            price: htfLast.value,
+            text: `${maCfg.type}${maCfg.period} ${maCfg.timeframe}`,
+            color: htfColor,
+            htfId: id,
+          });
+        }
+      }
+      return tags;
+    };
+    if (extraTfs.length) {
+      const nowMs = Date.now();
+      const cachedExtras = new Map<string, CandleData[]>();
+      const staleTfs: string[] = [];
+      for (const tf of extraTfs) {
+        const hit = htfCacheRef.current.get(`${symbol}|${tf}`);
+        if (hit?.data.length) {
+          cachedExtras.set(tf, hit.data);
+          if (shouldRefreshHtf(hit.at, nowMs)) staleTfs.push(tf);
+        } else {
+          staleTfs.push(tf);
         }
         refreshMaTags();
-      })().catch(() => {
-        // MAs HTF opcionales: el chart local ya esta pintado
-      });
+      }
+      if (staleTfs.length) {
+        (async () => {
+          const fresh = new Map(cachedExtras);
+          for (const tf of staleTfs) {
+            try {
+              const rows = await fetchCandles(symbol, tf, EXTRA_TF_LIMIT);
+              if (cancelled || chartRef.current !== chart) return;
+              const candlesTf = toCandleList(rows);
+              if (candlesTf.length) {
+                fresh.set(tf, candlesTf);
+                htfCacheRef.current.set(`${symbol}|${tf}`, { data: candlesTf, at: Date.now() });
+              }
+            } catch {
+              // ese TF queda con su caché
+            }
+          }
+          if (cancelled || chartRef.current !== chart || !fresh.size) return;
+          maTagsRef.current = maTagsRef.current.filter((t) => t.htfId == null);
+          for (const t of paintHtf(fresh)) maTagsRef.current.push(t);
+          refreshMaTags();
+        })().catch(() => {
+          // MAs HTF opcionales: el chart local ya esta pintado
+        });
+      }
     }
 
     if (indicators.volume) {
@@ -1544,6 +1611,10 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
           try {
             sell.setData(sellRows.map((p) => ({ ...p, color: 'rgba(242,54,69,0.45)' })));
           } catch {
+      }
+      if (cachedExtras.size) {
+        maTagsRef.current = maTagsRef.current.filter((t) => t.htfId == null);
+        for (const t of paintHtf(cachedExtras)) maTagsRef.current.push(t);
             // escala vol no disponible
           }
         }
