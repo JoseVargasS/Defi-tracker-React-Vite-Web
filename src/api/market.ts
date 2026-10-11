@@ -1,4 +1,4 @@
-import { fetch24hStats, fetchKlines, fetchLatestKlines, fetchPrice, getRecentCloses } from '@/api/binance';
+import { fetch24hStats, fetchKlines, fetchKlinesBefore, fetchLatestKlines, fetchPrice, getRecentCloses } from '@/api/binance';
 import { aggregateMexcRows, fetchMexcContracts, fetchMexcKlines, fetchMexcTicker } from '@/api/mexc';
 import { toCandleList } from '@/lib/chart/rsi';
 import {
@@ -173,6 +173,26 @@ export async function fetchCandles(entry: string, interval: string, limit?: numb
   if (source === 'MEXC') return fetchMexcKlines(symbol, interval);
   if (source === 'TV') return [];
   return (await fetchKlines(symbol, interval, limit)) as unknown[][];
+}
+
+// Velas anteriores a `beforeMs` (scroll infinito hacia atras). TV no tiene historia.
+export async function fetchCandlesBefore(
+  entry: string,
+  interval: string,
+  beforeMs: number,
+  limit: number,
+): Promise<unknown[][]> {
+  const { symbol, source } = parseTrackedPair(entry);
+  if (source === 'MEXC') {
+    const rows = await fetchMexcKlines(symbol, interval, {
+      endSec: Math.floor(beforeMs / 1000),
+      singlePage: true,
+    });
+    const { factor, mexcInterval } = mexcKlinePlan(interval);
+    return aggregateMexcRows(rows, factor, mexcInterval).slice(-limit);
+  }
+  if (source === 'TV') return [];
+  return fetchKlinesBefore(symbol, interval, beforeMs, limit);
 }
 
 // Cola fresca para el polling del chart. En MEXC agrega con el mismo plan

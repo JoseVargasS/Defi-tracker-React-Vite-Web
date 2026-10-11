@@ -172,12 +172,12 @@ export function aggregateMexcRows(
 export async function fetchMexcKlines(
   symbol: string,
   interval: string,
-  opts: { startSec?: number | null; singlePage?: boolean } = {},
+  opts: { startSec?: number | null; endSec?: number | null; singlePage?: boolean } = {},
 ): Promise<unknown[][]> {
   const { mexcInterval, factor } = mexcKlinePlan(interval);
   const pageCount = opts.singlePage ? 1 : chartPageCountForInterval(interval);
   const allRows: unknown[][] = [];
-  let end: number | null = null;
+  let end: number | null = opts.endSec ?? null;
   let pagesFetched = 0;
 
   try {

@@ -154,19 +154,21 @@ export async function fetchLatestKlines(symbol: string, interval: string, limit:
   }
 }
 
-export async function fetchKlines(symbol: string, interval: string, limit?: number): Promise<unknown[]> {
+export async function fetchKlines(symbol: string, interval: string, limit?: number, opts: { endTime?: number } = {}): Promise<unknown[]> {
   const qInterval = binanceInterval(interval);
   const totalLimit = Math.min(limit ?? DEFAULT_CHART_BAR_COUNT, MAX_CHART_BAR_COUNT);
   const cacheKey = `${symbol}-${interval}-${totalLimit}`;
   const now = Date.now();
 
-  const cached = _klinesCache.get(cacheKey);
-  if (cached && now - cached.ts < CACHE_DURATION) return cached.data;
+  if (opts.endTime == null) {
+    const cached = _klinesCache.get(cacheKey);
+    if (cached && now - cached.ts < CACHE_DURATION) return cached.data;
+  }
 
   try {
     // ponytail: Binance caps each klines call at 1000, paginate backwards via endTime to extend the visible history
     const klines: unknown[][] = [];
-    let endTime: number | undefined;
+    let endTime: number | undefined = opts.endTime;
     let remaining = totalLimit;
     // Port Android: 3 paginas en TFs chicos, 2 en medios, 1 en el resto.
     const maxPages = chartPageCountForInterval(interval);
@@ -187,12 +189,23 @@ export async function fetchKlines(symbol: string, interval: string, limit?: numb
     const aggregate = intervalAggregate(interval);
     if (aggregate) aggregateKlinesInPlace(klines, aggregate);
 
-    _klinesCache.set(cacheKey, { data: klines, ts: now });
+    if (opts.endTime == null) _klinesCache.set(cacheKey, { data: klines, ts: now });
     return klines;
   } catch (err) {
     console.error('fetchKlines error', err);
     return [];
   }
+}
+
+// Velas anteriores a `beforeMs` para el scroll infinito del chart (sin cache:
+// cada posicion historica se pide una sola vez por sesion).
+export async function fetchKlinesBefore(
+  symbol: string,
+  interval: string,
+  beforeMs: number,
+  limit: number,
+): Promise<unknown[][]> {
+  return (await fetchKlines(symbol, interval, limit, { endTime: Math.floor(beforeMs) })) as unknown[][];
 }
 
 function closesOf(rows: unknown[], limit: number): number[] {

@@ -74,12 +74,13 @@ interface SocketOpts {
 
 function connectWithRetry(url: string, opts: SocketOpts): () => void {
   let closed = false;
+  let paused = typeof document !== 'undefined' && document.hidden;
   let attempt = 0;
   let ws: WebSocket | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
 
   const connect = () => {
-    if (closed) return;
+    if (closed || paused) return;
     try {
       ws = new WebSocket(url);
     } catch {
@@ -109,20 +110,49 @@ function connectWithRetry(url: string, opts: SocketOpts): () => void {
   };
 
   const schedule = () => {
-    if (closed) return;
+    if (closed || paused) return;
     attempt++;
-    const waitMs = Math.min(2_000 * 2 ** Math.min(attempt, 4), 30_000);
+    // Backoff con jitter: 2s -> 60s, evita manadas tras un corte.
+    const waitMs = Math.min(2_000 * 2 ** Math.min(attempt, 5), 60_000) * (0.5 + Math.random() / 2);
+    if (timer !== null) clearTimeout(timer);
     timer = setTimeout(connect, waitMs);
   };
+
+  const onVisibility = () => {
+    if (typeof document === 'undefined') return;
+    paused = document.hidden;
+    if (paused) {
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      try {
+        ws?.close();
+      } catch {
+        // cierre best-effort al ocultar la pestaña
+      }
+      ws = null;
+    } else if (!closed) {
+      attempt = 0;
+      connect();
+    }
+  };
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', onVisibility);
+  }
 
   connect();
   return () => {
     closed = true;
     if (timer !== null) clearTimeout(timer);
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', onVisibility);
+    }
     try {
       ws?.close();
     } catch {
-      // cierre best-effort
+      // cierre best-effort (en dev StrictMode puede cerrar conectando: benigno)
     }
   };
 }
