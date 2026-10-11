@@ -12,6 +12,18 @@ import {
   writeSmaLines,
   readEmaLines,
   writeEmaLines,
+  readChartToggles,
+  writeChartToggles,
+  readCurrentPair,
+  writeCurrentPair,
+  readCurrentInterval,
+  writeCurrentInterval,
+  readChartMode,
+  writeChartMode,
+  readChartTimezone,
+  writeChartTimezone,
+  DEFAULT_CHART_TOGGLES,
+  DEFAULT_CHART_TIMEZONE,
   migrateAppStorage,
   clearAppStorage,
   STORAGE_KEYS,
@@ -271,6 +283,126 @@ describe('SMA/EMA lines persistence', () => {
     const read = readEmaLines();
     expect(read).toHaveLength(1);
     expect(read[0].period).toBe(12);
+  });
+});
+
+describe('chart toggles persistence', () => {
+  beforeEach(() => { localStorage.clear(); });
+
+  it('readChartToggles returns defaults when nothing stored', () => {
+    expect(readChartToggles()).toEqual(DEFAULT_CHART_TOGGLES);
+  });
+
+  it('writeChartToggles round-trips toggles, smc, rsi and drawTool', () => {
+    writeChartToggles({
+      ...DEFAULT_CHART_TOGGLES,
+      bollinger: true,
+      macd: true,
+      rsiEnabled: false,
+      rsiPeriod: 21,
+      smc: { ...DEFAULT_CHART_TOGGLES.smc, swings: true, zones: true },
+      drawTool: 'FIBO',
+    });
+    const read = readChartToggles();
+    expect(read.bollinger).toBe(true);
+    expect(read.macd).toBe(true);
+    expect(read.rsiEnabled).toBe(false);
+    expect(read.rsiPeriod).toBe(21);
+    expect(read.smc.swings).toBe(true);
+    expect(read.smc.zones).toBe(true);
+    expect(read.smc.structure).toBe(false);
+    expect(read.drawTool).toBe('FIBO');
+  });
+
+  it('sanitizes corrupt toggles back to defaults', () => {
+    localStorage.setItem(STORAGE_KEYS.chartToggles, JSON.stringify({
+      bollinger: 'yes',
+      rsiPeriod: 9999,
+      smc: { swings: 'x' },
+      drawTool: 'NOPE',
+    }));
+    const read = readChartToggles();
+    expect(read.bollinger).toBe(DEFAULT_CHART_TOGGLES.bollinger);
+    expect(read.rsiPeriod).toBe(DEFAULT_CHART_TOGGLES.rsiPeriod);
+    expect(read.smc.swings).toBe(false);
+    expect(read.drawTool).toBeNull();
+  });
+
+  it('returns defaults on invalid JSON', () => {
+    localStorage.setItem(STORAGE_KEYS.chartToggles, '{no-json');
+    expect(readChartToggles()).toEqual(DEFAULT_CHART_TOGGLES);
+  });
+});
+
+describe('current pair / interval / chart mode persistence', () => {
+  beforeEach(() => { localStorage.clear(); });
+
+  it('readCurrentPair returns null when nothing stored', () => {
+    expect(readCurrentPair()).toBeNull();
+  });
+
+  it('writeCurrentPair round-trips and normalizes to uppercase', () => {
+    writeCurrentPair('ethusdt');
+    expect(readCurrentPair()).toBe('ETHUSDT');
+  });
+
+  it('writeCurrentPair(null) clears the stored pair', () => {
+    writeCurrentPair('ETHUSDT');
+    writeCurrentPair(null);
+    expect(readCurrentPair()).toBeNull();
+    expect(localStorage.getItem(STORAGE_KEYS.currentPair)).toBeNull();
+  });
+
+  it('readCurrentPair returns null for invalid symbols', () => {
+    localStorage.setItem(STORAGE_KEYS.currentPair, 'BAD!');
+    expect(readCurrentPair()).toBeNull();
+  });
+
+  it('readCurrentInterval defaults to 5m and round-trips valid keys', () => {
+    expect(readCurrentInterval()).toBe('5m');
+    writeCurrentInterval('1h');
+    expect(readCurrentInterval()).toBe('1h');
+  });
+
+  it('ignores invalid intervals', () => {
+    writeCurrentInterval('1h');
+    writeCurrentInterval('nope');
+    expect(readCurrentInterval()).toBe('1h');
+  });
+
+  it('readChartMode defaults to lightweight and round-trips', () => {
+    expect(readChartMode()).toBe('lightweight');
+    writeChartMode('tradingview');
+    expect(readChartMode()).toBe('tradingview');
+  });
+
+  it('falls back to lightweight for unknown modes', () => {
+    localStorage.setItem(STORAGE_KEYS.chartMode, 'nope');
+    expect(readChartMode()).toBe('lightweight');
+  });
+});
+
+describe('chart timezone persistence', () => {
+  beforeEach(() => { localStorage.clear(); });
+
+  it('defaults to Lima', () => {
+    expect(readChartTimezone()).toBe(DEFAULT_CHART_TIMEZONE);
+    expect(readChartTimezone()).toBe('America/Lima');
+  });
+
+  it('writeChartTimezone round-trips valid zones', () => {
+    writeChartTimezone('UTC');
+    expect(readChartTimezone()).toBe('UTC');
+    writeChartTimezone('Asia/Tokyo');
+    expect(readChartTimezone()).toBe('Asia/Tokyo');
+  });
+
+  it('ignores invalid zones', () => {
+    writeChartTimezone('UTC');
+    writeChartTimezone('nope');
+    expect(readChartTimezone()).toBe('UTC');
+    localStorage.setItem(STORAGE_KEYS.chartTimezone, 'Mars/Olympus');
+    expect(readChartTimezone()).toBe(DEFAULT_CHART_TIMEZONE);
   });
 });
 

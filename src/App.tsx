@@ -11,7 +11,7 @@ import { ChartToolbar } from '@/components/market/ChartToolbar';
 import TradingViewWidget from '@/components/market/TradingViewWidget';
 import { WalletSection } from '@/components/wallet/WalletSection';
 import TransactionSection from '@/components/transactions/TransactionSection';
-import { migrateAppStorage, readTrackedPairs, writeTrackedPairs, readIndicatorColors, writeIndicatorColors, readSmaLines, writeSmaLines, readEmaLines, writeEmaLines } from '@/lib/storage';
+import { migrateAppStorage, readTrackedPairs, writeTrackedPairs, readIndicatorColors, writeIndicatorColors, readSmaLines, writeSmaLines, readEmaLines, writeEmaLines, readChartToggles, writeChartToggles, readCurrentPair, writeCurrentPair, readCurrentInterval, writeCurrentInterval, readChartMode, writeChartMode } from '@/lib/storage';
 import { useMarketStore } from '@/store/useMarketStore';
 import { fetchPairDetail, displayPairLabel } from '@/api/market';
 import { formatPrice } from '@/lib/utils';
@@ -96,14 +96,24 @@ export default function App() {
 
   useEffect(() => {
     migrateAppStorage();
-    setTracked(readTrackedPairs());
+    const tracked = readTrackedPairs();
+    setTracked(tracked);
 
     const savedColors = readIndicatorColors();
     const savedSmaLines = readSmaLines();
     const savedEmaLines = readEmaLines();
+    const savedToggles = readChartToggles();
+    const savedPair = readCurrentPair();
+    const savedInterval = readCurrentInterval();
+    const savedMode = readChartMode();
     useMarketStore.setState((state) => ({
+      currentPair: savedPair ?? state.currentPair,
+      currentInterval: savedInterval,
+      chartMode: savedMode,
       chartIndicators: {
         ...state.chartIndicators,
+        ...savedToggles,
+        smc: { ...savedToggles.smc },
         colors: savedColors,
         smaLines: savedSmaLines,
         emaLines: savedEmaLines,
@@ -126,25 +136,58 @@ export default function App() {
       );
     })();
 
-    const unsubTracked = useMarketStore.subscribe((state) => {
-      writeTrackedPairs(state.tracked);
-    });
     let saveTimer: ReturnType<typeof setTimeout> | null = null;
-    const unsubIndicators = useMarketStore.subscribe((state, prevState) => {
+    const unsub = useMarketStore.subscribe((state, prevState) => {
+      if (state.tracked !== prevState.tracked) writeTrackedPairs(state.tracked);
       const c = state.chartIndicators;
       const p = prevState.chartIndicators;
-      if (c.colors !== p.colors) {
-        if (saveTimer !== null) clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => writeIndicatorColors(c.colors), 300);
-      }
-      if (c.smaLines !== p.smaLines) {
-        if (saveTimer !== null) clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => writeSmaLines(c.smaLines), 300);
-      }
-      if (c.emaLines !== p.emaLines) {
-        if (saveTimer !== null) clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => writeEmaLines(c.emaLines), 300);
-      }
+      const uiChanged =
+        state.currentPair !== prevState.currentPair ||
+        state.currentInterval !== prevState.currentInterval ||
+        state.chartMode !== prevState.chartMode;
+      const togglesChanged =
+        uiChanged ||
+        c.bollinger !== p.bollinger ||
+        c.volume !== p.volume ||
+        c.stochRsi !== p.stochRsi ||
+        c.volumeProfile !== p.volumeProfile ||
+        c.macd !== p.macd ||
+        c.taker !== p.taker ||
+        c.divs !== p.divs ||
+        c.signals !== p.signals ||
+        c.rsiEnabled !== p.rsiEnabled ||
+        c.rsiPeriod !== p.rsiPeriod ||
+        c.smc !== p.smc ||
+        c.drawTool !== p.drawTool ||
+        c.colors !== p.colors ||
+        c.smaLines !== p.smaLines ||
+        c.emaLines !== p.emaLines;
+      if (!togglesChanged) return;
+      if (saveTimer !== null) clearTimeout(saveTimer);
+      const snapshot = state;
+      saveTimer = setTimeout(() => {
+        const ind = snapshot.chartIndicators;
+        writeChartToggles({
+          bollinger: ind.bollinger,
+          volume: ind.volume,
+          stochRsi: ind.stochRsi,
+          volumeProfile: ind.volumeProfile,
+          macd: ind.macd,
+          taker: ind.taker,
+          divs: ind.divs,
+          signals: ind.signals,
+          rsiEnabled: ind.rsiEnabled,
+          rsiPeriod: ind.rsiPeriod,
+          smc: ind.smc,
+          drawTool: ind.drawTool,
+        });
+        writeIndicatorColors(ind.colors);
+        writeSmaLines(ind.smaLines);
+        writeEmaLines(ind.emaLines);
+        writeCurrentPair(snapshot.currentPair);
+        writeCurrentInterval(snapshot.currentInterval);
+        writeChartMode(snapshot.chartMode);
+      }, 300);
     });
 
     const handler = (event: PromiseRejectionEvent) => {
@@ -159,8 +202,7 @@ export default function App() {
     window.addEventListener('unhandledrejection', handler);
 
     return () => {
-      unsubTracked();
-      unsubIndicators();
+      unsub();
       if (saveTimer !== null) clearTimeout(saveTimer);
       window.removeEventListener('unhandledrejection', handler);
     };

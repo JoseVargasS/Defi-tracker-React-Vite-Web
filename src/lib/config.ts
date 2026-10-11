@@ -93,6 +93,8 @@ const AGGREGATE_BY_INTERVAL: Record<string, number> = CHART_INTERVALS.reduce(
 
 export const DEFAULT_CHART_BAR_COUNT = 1000;
 export const MAX_CHART_BAR_COUNT = 5000;
+// Tope total de velas en memoria para el scroll infinito (fluido aun en 1m).
+export const HISTORY_HARD_CAP = 10000;
 export const CHART_PAGINATION_STEP = 1000;
 export const CHART_EDGE_THRESHOLD_RATIO = 0.12;
 

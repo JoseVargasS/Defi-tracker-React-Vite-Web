@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import App from '@/App';
 import { fetchPairDetail } from '@/api/market';
+import { readCurrentPair, readChartMode } from '@/lib/storage';
 import { useMarketStore } from '@/store/useMarketStore';
 import { useWalletStore } from '@/store/useWalletStore';
 
@@ -45,6 +46,35 @@ vi.mock('@/lib/storage', () => ({
   writeSmaLines: vi.fn(),
   readEmaLines: vi.fn().mockReturnValue([]),
   writeEmaLines: vi.fn(),
+  readChartToggles: vi.fn().mockReturnValue({
+    bollinger: false,
+    volume: false,
+    stochRsi: false,
+    volumeProfile: false,
+    macd: false,
+    taker: false,
+    divs: false,
+    signals: false,
+    rsiEnabled: false,
+    rsiPeriod: 14,
+    smc: {
+      swings: false,
+      structure: false,
+      zones: false,
+      premium: false,
+      eq: false,
+      liquidity: false,
+      confluence: false,
+    },
+    drawTool: null,
+  }),
+  writeChartToggles: vi.fn(),
+  readCurrentPair: vi.fn().mockReturnValue(null),
+  writeCurrentPair: vi.fn(),
+  readCurrentInterval: vi.fn().mockReturnValue('5m'),
+  writeCurrentInterval: vi.fn(),
+  readChartMode: vi.fn().mockReturnValue('lightweight'),
+  writeChartMode: vi.fn(),
   readIndicatorColors: vi.fn().mockReturnValue({
     sma: '#ff0000', ema: '#00ff00', rsi: '#0000ff',
     stochK: '#ff00ff', stochD: '#ffff00', bbLine: '#00ffff',
@@ -111,6 +141,8 @@ vi.mock('chartjs-adapter-date-fns', () => ({}));
 
 describe('App', () => {
   beforeEach(() => {
+    vi.mocked(readCurrentPair).mockReturnValue(null);
+    vi.mocked(readChartMode).mockReturnValue('lightweight');
     useMarketStore.setState({
       activeView: 'market',
       chartMode: 'tradingview',
@@ -260,11 +292,10 @@ describe('App', () => {
     expect(useMarketStore.getState().chartIndicators.volume).toBe(true);
   });
 
-  it('shows SMA and EMA buttons', () => {
+  it('shows MA button', () => {
     useMarketStore.setState({ currentPair: 'BTCUSDT' });
     render(<App />);
-    expect(screen.getByText('SMA')).toBeTruthy();
-    expect(screen.getByText('EMA')).toBeTruthy();
+    expect(screen.getByText('MA')).toBeTruthy();
   });
 
   it('shows measure tool button', () => {
@@ -294,24 +325,32 @@ describe('App', () => {
   });
 
   it('renders Pro chart when lightweight mode selected', async () => {
+    vi.mocked(readCurrentPair).mockReturnValue('BTCUSDT');
+    vi.mocked(readChartMode).mockReturnValue('lightweight');
     useMarketStore.setState({ currentPair: 'BTCUSDT', chartMode: 'lightweight' });
     render(<App />);
     expect(await screen.findByTestId('lightweight-chart')).toBeTruthy();
   });
 
   it('renders TradingView widget when tradingview mode selected', () => {
+    vi.mocked(readCurrentPair).mockReturnValue('BTCUSDT');
+    vi.mocked(readChartMode).mockReturnValue('tradingview');
     useMarketStore.setState({ currentPair: 'BTCUSDT', chartMode: 'tradingview' });
     render(<App />);
     expect(screen.getByTestId('tradingview-widget')).toBeTruthy();
   });
 
   it('renders CandlestickChart when chartjs mode selected', async () => {
+    vi.mocked(readCurrentPair).mockReturnValue('BTCUSDT');
+    vi.mocked(readChartMode).mockReturnValue('chartjs');
     useMarketStore.setState({ currentPair: 'BTCUSDT', chartMode: 'chartjs' });
     render(<App />);
     expect(await screen.findByTestId('candlestick-chart')).toBeTruthy();
   });
 
   it('switches between chart modes using toggle', () => {
+    vi.mocked(readCurrentPair).mockReturnValue('BTCUSDT');
+    vi.mocked(readChartMode).mockReturnValue('tradingview');
     useMarketStore.setState({ currentPair: 'BTCUSDT', chartMode: 'tradingview' });
     render(<App />);
     expect(screen.getByTestId('tradingview-widget')).toBeTruthy();
