@@ -124,7 +124,12 @@ describe('LightweightChart', () => {
     const chips = container.querySelector('.lw-chips') as HTMLElement;
     expect(within(chips).getByText(/^RSI /)).toBeTruthy();
     expect(within(chips).getByText(/^MACD /)).toBeTruthy();
-    expect(within(chips).getByText(/^POC /)).toBeTruthy();
+    // VP estilo TV: overlay con barras a la derecha + tag POC (ya no es chip).
+    await waitFor(() => {
+      expect(container.querySelectorAll('.vp-row').length).toBeGreaterThan(0);
+    });
+    expect(container.querySelector('.vp-tag')?.textContent).toMatch(/^VP POC /);
+    expect(container.querySelector('.vp-poc-line')).toBeTruthy();
   });
 
   it('follows crosshair with RSI pane values, not the last candle', async () => {
@@ -733,11 +738,6 @@ describe('LightweightChart', () => {
     });
   });
 
-  it('does not drag locked fibs', async () => {
-    localStorage.setItem(
-      'fib_overlays_BTCUSDT',
-      'f1;60000;100;3600000;110;#FFFFFF;1;0.5+1;0;1',
-    );
   it('previews measure range with live label while drawing', async () => {
     useMarketStore.setState({
       chartIndicators: { ...indicators(), drawTool: 'MEASURE' },
@@ -780,6 +780,11 @@ describe('LightweightChart', () => {
     });
   });
 
+  it('does not drag locked fibs', async () => {
+    localStorage.setItem(
+      'fib_overlays_BTCUSDT',
+      'f1;60000;100;3600000;110;#FFFFFF;1;0.5+1;0;1',
+    );
     const { container } = render(<LightweightChart symbol="BTCUSDT" interval="1h" indicators={indicators()} overlaysTick={0} resetSignal={0} />);
     await waitFor(() => {
       expect(screen.getByText(/C 160\.00/)).toBeTruthy();
@@ -1027,11 +1032,6 @@ describe('LightweightChart', () => {
     expect(leaders[0]?.getAttribute('stroke-dasharray')).toBe('2 3');
   });
 
-  it('shows selected fib bar on hover', async () => {
-    localStorage.setItem(
-      'fib_overlays_BTCUSDT',
-      'f1;60000;100;3600000;110;#FFFFFF;1;0.5+1;0;0',
-    );
   it('keeps other-TF MAs live across rebuilds without removing their series', async () => {
     chartMocks.createdSeries.length = 0;
     const props = {
@@ -1073,6 +1073,11 @@ describe('LightweightChart', () => {
     expect(screen.getByText('SMA5 5m')).toBeTruthy();
   });
 
+  it('shows selected fib bar on hover', async () => {
+    localStorage.setItem(
+      'fib_overlays_BTCUSDT',
+      'f1;60000;100;3600000;110;#FFFFFF;1;0.5+1;0;0',
+    );
     const { container } = render(<LightweightChart symbol="BTCUSDT" interval="1h" indicators={indicators()} overlaysTick={0} resetSignal={0} />);
     await waitFor(() => {
       expect(screen.getByText(/C 160\.00/)).toBeTruthy();

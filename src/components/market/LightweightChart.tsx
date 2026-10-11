@@ -18,7 +18,7 @@ import {
 } from 'lightweight-charts';
 import { displayBase, displayPairLabel, fetchCandles, fetchCandlesBefore, fetchExtendedFlag, fetchLatestCandles } from '@/api/market';
 import { fetchTakerVolumes } from '@/api/binanceFutures';
-import { calculateBollingerBands, calculateStochRSI, calculateVolumeProfile } from '@/lib/chart/indicators';
+import { calculateBollingerBands, calculateStochRSI, calculateVolumeProfile, vpRowRects, type VpBarRect, type VpRowInput } from '@/lib/chart/indicators';
 import { calculateMacd, type MacdData } from '@/lib/chart/macd';
 import { computeMaLines, resolveHtfColor, shouldRefreshHtf, stackTagCenters, type MaConfig } from '@/lib/chart/ma';
 import { calculateRsi, rsiMaOf, toCandleList, type CandleData } from '@/lib/chart/rsi';
@@ -202,6 +202,13 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
   const [maTags, setMaTags] = useState<{
     tags: { left: number; top: number; text: string; color: string }[];
     leaders: { x1: number; y1: number; x2: number; y2: number; x3: number; y3: number; color: string }[];
+  } | null>(null);
+  // Volume Profile estilo TV: filas en espacio de precio sobre el rango
+  // visible; a pixeles se resuelve en el render (como el punto pendiente).
+  const [vp, setVp] = useState<{
+    rows: VpRowInput[];
+    maxVolume: number;
+    poc: { price: number; total: number } | null;
   } | null>(null);
   const priceTagTopRef = useRef<number | null>(null);
   const [priceTagHidden, setPriceTagHidden] = useState(false);
@@ -465,6 +472,44 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     });
   }, []);
 
+  // Volume Profile sobre el rango visible (VRVP de TV): filas en espacio de
+  // precio; el render las lleva a pixeles con la escala viva.
+  const refreshVp = useCallback(() => {
+    const chartApi = chartRef.current;
+    const data = candlesRef.current;
+    if (!chartApi || data.length < 2) {
+      setVp(null);
+      return;
+    }
+    try {
+      const range = chartApi.timeScale().getVisibleLogicalRange();
+      if (!range) {
+        setVp(null);
+        return;
+      }
+      const i0 = Math.max(0, Math.floor(range.from));
+      const i1 = Math.min(data.length - 1, Math.ceil(range.to));
+      if (i1 < i0) {
+        setVp(null);
+        return;
+      }
+      const vpCalc = calculateVolumeProfile(toLegacy(data.slice(i0, i1 + 1)), 64);
+      if (!vpCalc.rows.length || !(vpCalc.maxVolume > 0)) {
+        setVp(null);
+        return;
+      }
+      setVp({
+        rows: vpCalc.rows.map((r) => ({
+          high: r.high, low: r.low, up: r.up, down: r.down, total: r.total, poc: r === vpCalc.poc,
+        })),
+        maxVolume: vpCalc.maxVolume,
+        poc: vpCalc.poc ? { price: vpCalc.poc.price, total: vpCalc.poc.total } : null,
+      });
+    } catch {
+      setVp(null);
+    }
+  }, []);
+
   useImperativeHandle(ref, () => ({
     patchColor: (key, hex) => {
       for (const [s, colorKey] of colorKeysRef.current) {
@@ -532,6 +577,9 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     const el = containerRef.current;
     if (!el || !symbol) return;
     let cancelled = false;
+    // Chart nuevo: la caché HTF y las series vivas del anterior no sirven.
+    htfCacheRef.current.clear();
+    htfSeriesRef.current.clear();
 
     const chart = createChart(el, {
       layout: { background: { color: COLORS.bg }, textColor: COLORS.ink2 },
@@ -577,11 +625,9 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     };
     let ghostQueued = false;
     let legendQueued = false;
-    // Chart nuevo: la caché HTF y las series vivas del anterior no sirven.
-    htfCacheRef.current.clear();
-    htfSeriesRef.current.clear();
     let labelsQueued = false;
     let dragQueued = false;
+    let vpQueued = false;
 
     const fibPixels = (fib: FibOverlay): { ax: number; ay: number; bx: number; by: number } | null => {
       const candlesApi = candleRef.current;
@@ -634,6 +680,18 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       } catch {
         return null;
       }
+    };
+
+    // Etiqueta estilo TV para Medir: % | delta | velas (solo overlay, no toca series).
+    const measureLabel = (a: { time: number; price: number }, tB: number, pB: number): { label: string; up: boolean } => {
+      const data = candlesRef.current;
+      const step = data.length >= 2 ? data[data.length - 1]!.time - data[data.length - 2]!.time : 0;
+      const bars = step > 0 ? Math.round(Math.abs(tB - a.time) / step) + 1 : 0;
+      const delta = pB - a.price;
+      const pct = a.price ? (delta / a.price) * 100 : 0;
+      const up = delta >= 0;
+      const label = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}% | ${delta >= 0 ? '+' : ''}${formatPriceForChart(delta, extendedRef.current)} | ${bars} velas`;
+      return { label, up };
     };
 
     const moveDraggedAnchor = () => {
@@ -689,18 +747,6 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
       onResize();
       if (!labelsQueued) {
-    // Etiqueta estilo TV para Medir: % | delta | velas (solo overlay, no toca series).
-    const measureLabel = (a: { time: number; price: number }, tB: number, pB: number): { label: string; up: boolean } => {
-      const data = candlesRef.current;
-      const step = data.length >= 2 ? data[data.length - 1]!.time - data[data.length - 2]!.time : 0;
-      const bars = step > 0 ? Math.round(Math.abs(tB - a.time) / step) + 1 : 0;
-      const delta = pB - a.price;
-      const pct = a.price ? (delta / a.price) * 100 : 0;
-      const up = delta >= 0;
-      const label = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}% | ${delta >= 0 ? '+' : ''}${formatPriceForChart(delta, extendedRef.current)} | ${bars} velas`;
-      return { label, up };
-    };
-
         labelsQueued = true;
         rafThrottle(() => {
           labelsQueued = false;
@@ -1024,6 +1070,13 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       refreshFibLabels();
       refreshCountdown();
       refreshMaTags();
+      if (!vpQueued) {
+        vpQueued = true;
+        rafThrottle(() => {
+          vpQueued = false;
+          refreshVp();
+        });
+      }
     });
 
     // Historial infinito hacia atras: al acercarse al borde izquierdo se traen
@@ -1198,6 +1251,15 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       const id = `${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
       const start = { time: pend.time, price: pend.price };
       const end = { time: timeMs, price };
+      // Medir no persiste: queda una sola medida hasta cambiar de herramienta.
+      if (tool === 'MEASURE') {
+        const m = measureLabel(start, end.time, end.price);
+        setMeasured({ a: { ...start }, b: { ...end }, label: m.label, up: m.up });
+        pendingRef.current = null;
+        setDrawStep(0);
+        clearGhost();
+        return;
+      }
       if (tool === 'FIBO') {
         const list = loadFibOverlays(symbol);
         list.push({
@@ -1258,15 +1320,6 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       // encoger toda la historia (fitContent la deja ilegible).
       try {
         chart.timeScale().setVisibleLogicalRange({
-      // Medir no persiste: queda una sola medida hasta cambiar de herramienta.
-      if (tool === 'MEASURE') {
-        const m = measureLabel(start, end.time, end.price);
-        setMeasured({ a: { ...start }, b: { ...end }, label: m.label, up: m.up });
-        pendingRef.current = null;
-        setDrawStep(0);
-        clearGhost();
-        return;
-      }
           from: Math.max(0, data.length - INITIAL_VISIBLE_BARS),
           to: data.length + INITIAL_RIGHT_OFFSET_BARS,
         });
@@ -1303,6 +1356,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       legendQueued = false;
       labelsQueued = false;
       dragQueued = false;
+      vpQueued = false;
       draggingRef.current = null;
       hoverAnchorRef.current = null;
       hoverIdRef.current = null;
@@ -1320,7 +1374,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       draggingRef.current = null;
       hoverAnchorRef.current = null;
     };
-  }, [symbol, interval, applyTimezone, refreshFibLabels, refreshFibLines, refreshCountdown, refreshMaTags, syncFibDefs, xAtTimeMs]);
+  }, [symbol, interval, applyTimezone, refreshFibLabels, refreshFibLines, refreshCountdown, refreshMaTags, refreshVp, syncFibDefs, xAtTimeMs]);
 
   // Si cambia la herramienta (o se suelta), se limpian fantasma, pendiente y medida.
   useEffect(() => {
@@ -1329,8 +1383,13 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     pendingRef.current = null;
     ghostPxRef.current = null;
     setGhostFib(null);
+    setMeasured(null);
     setDrawStep(0);
   }, [indicators.drawTool]);
+
+  useEffect(() => {
+    setMeasured(null);
+  }, [symbol]);
 
   // Fibo hovereado a full, los demas tenues: el overlay se re-deriva.
   useEffect(() => {
@@ -1344,7 +1403,25 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     if (!chart || !data.length || status !== 'ready') return;
     let cancelled = false;
 
+    // MAs de otro TF que se quieren: sus series vivas no se tocan (cero parpadeo).
+    const allMasEarly = maConfigs(indicators.smaLines, indicators.emaLines).filter((m) => m.visible);
+    const wantHtfIds = new Set(
+      allMasEarly.filter((m) => m.timeframe !== 'chart' && m.timeframe !== interval).map((m) => m.id),
+    );
+    const keptHtf = new Set<AnySeries>();
+    for (const [id, s] of htfSeriesRef.current) {
+      if (wantHtfIds.has(id)) keptHtf.add(s);
+      else {
+        try {
+          chart.removeSeries(s);
+        } catch {
+          // ya removida
+        }
+        htfSeriesRef.current.delete(id);
+      }
+    }
     for (const s of overlaysRef.current) {
+      if (keptHtf.has(s)) continue;
       try {
         chart.removeSeries(s);
       } catch {
@@ -1390,38 +1467,15 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     const ext = extendedRef.current;
     const refClose = data[data.length - 1]!.close;
     fibFmtRef.current = { refClose, ext };
-    setMeasured(null);
     const fmtP = (v: number): string => {
       const s = formatAxisPrice(v, refClose, ext);
       return /^-0\.0+$/.test(s) ? s.slice(1) : s;
-  useEffect(() => {
-    setMeasured(null);
-  }, [symbol]);
-
     };
     const chips: { color: string; text: string }[] = [];
     // Leyendas dentro de cada subpanel, como la app (los chips de arriba se quedan).
     const pl: PaneLegends = {};
     const last = (values: (number | null | undefined)[]): number | null => {
-    // MAs de otro TF que se quieren: sus series vivas no se tocan (cero parpadeo).
-    const allMasEarly = maConfigs(indicators.smaLines, indicators.emaLines).filter((m) => m.visible);
-    const wantHtfIds = new Set(
-      allMasEarly.filter((m) => m.timeframe !== 'chart' && m.timeframe !== interval).map((m) => m.id),
-    );
-    const keptHtf = new Set<AnySeries>();
-    for (const [id, s] of htfSeriesRef.current) {
-      if (wantHtfIds.has(id)) keptHtf.add(s);
-      else {
-        try {
-          chart.removeSeries(s);
-        } catch {
-          // ya removida
-        }
-        htfSeriesRef.current.delete(id);
-      }
-    }
       for (let i = values.length - 1; i >= 0; i--) {
-      if (keptHtf.has(s)) continue;
         const v = values[i];
         if (typeof v === 'number' && Number.isFinite(v)) return v;
       }
@@ -1535,6 +1589,10 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
         } else {
           staleTfs.push(tf);
         }
+      }
+      if (cachedExtras.size) {
+        maTagsRef.current = maTagsRef.current.filter((t) => t.htfId == null);
+        for (const t of paintHtf(cachedExtras)) maTagsRef.current.push(t);
         refreshMaTags();
       }
       if (staleTfs.length) {
@@ -1611,10 +1669,6 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
           try {
             sell.setData(sellRows.map((p) => ({ ...p, color: 'rgba(242,54,69,0.45)' })));
           } catch {
-      }
-      if (cachedExtras.size) {
-        maTagsRef.current = maTagsRef.current.filter((t) => t.htfId == null);
-        for (const t of paintHtf(cachedExtras)) maTagsRef.current.push(t);
             // escala vol no disponible
           }
         }
@@ -1623,44 +1677,12 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       });
     }
 
+    // Volume Profile estilo TV: solo dispara el cálculo sobre el rango
+    // visible; el overlay SVG lo pinta (barras a la derecha + POC + tag).
     if (indicators.volumeProfile) {
-      const vp = calculateVolumeProfile(legacy, 48);
-      if (vp.rows.length && vp.maxVolume > 0) {
-        const span = Math.min(40, data.length);
-        const t0 = times[Math.max(0, times.length - span)]!;
-        const t1 = times[times.length - 1]!;
-        for (const rowVp of vp.rows) {
-          const frac = rowVp.total / vp.maxVolume;
-          if (!(frac > 0)) continue;
-          const s = track(chart.addSeries(LineSeries, {
-            color: rowVp.up >= rowVp.down ? 'rgba(0,192,135,0.55)' : 'rgba(242,54,69,0.55)',
-            lineWidth: (frac >= 0.66 ? 4 : frac >= 0.33 ? 2 : 1) as 1 | 2 | 3 | 4,
-            ...quiet,
-          }));
-          s.setData(toLineData([
-            { time: t0, value: rowVp.price },
-            { time: t1, value: rowVp.price },
-          ]));
-        }
-        if (vp.poc) {
-          chips.push({ color: COLORS.accent, text: `POC ${fmtP(vp.poc.price)}` });
-          try {
-            const pocLine = candlesRef.current
-              ? candleRef.current?.createPriceLine({
-                price: vp.poc.price,
-                color: COLORS.accent,
-                lineWidth: 1,
-                lineStyle: 2,
-                axisLabelVisible: true,
-                title: 'POC',
-              })
-              : undefined;
-            if (pocLine && candleRef.current) priceLinesRef.current.push({ series: candleRef.current, line: pocLine });
-          } catch {
-            // fuera de rango
-          }
-        }
-      }
+      refreshVp();
+    } else {
+      setVp(null);
     }
 
     if (indicators.stochRsi || indicators.rsiEnabled) {
@@ -2037,7 +2059,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     return () => {
       cancelled = true;
     };
-  }, [indicators, status, symbol, interval, tick, overlaysTick, refreshFibLabels, refreshFibLines, refreshMaTags, syncFibDefs]);
+    }, [indicators, status, symbol, interval, tick, overlaysTick, refreshFibLabels, refreshFibLines, refreshMaTags, refreshVp, syncFibDefs]);
 
   // Polling 5s: parchea la ultima vela o agrega la nueva.
   useEffect(() => {
@@ -2126,6 +2148,66 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       }
     } catch {
       pendingDot = null;
+    }
+  }
+
+  // Medida fijada a pixeles del frame actual (solo overlay: la vista no se mueve).
+  let measuredView: { x: number; y: number; w: number; h: number; label: string; up: boolean } | null = null;
+  if (measured && chartRef.current && candleRef.current) {
+    try {
+      const ax = xAtTimeMs(chartRef.current, measured.a.time);
+      const bx = xAtTimeMs(chartRef.current, measured.b.time);
+      const ay = candleRef.current.priceToCoordinate(measured.a.price);
+      const by = candleRef.current.priceToCoordinate(measured.b.price);
+      if (typeof ax === 'number' && typeof bx === 'number' && typeof ay === 'number' && typeof by === 'number' &&
+        [ax, bx, ay, by].every((v) => Number.isFinite(v))) {
+        measuredView = {
+          x: Math.min(ax, bx), y: Math.min(ay, by),
+          w: Math.max(Math.abs(bx - ax), 1), h: Math.max(Math.abs(by - ay), 1),
+          label: measured.label, up: measured.up,
+        };
+      }
+    } catch {
+      measuredView = null;
+    }
+  }
+
+  // Volume Profile a pixeles del frame actual (solo overlay: la vista no se mueve).
+  const VP_MAX_WIDTH = 140;
+  let vpView: { bars: VpBarRect[]; pocY: number | null; tag: string | null } | null = null;
+  if (indicators.volumeProfile && vp && vp.rows.length && containerRef.current && chartRef.current && candleRef.current) {
+    try {
+      const el = containerRef.current;
+      const W = el.clientWidth || 0;
+      const H = el.clientHeight || 500;
+      let axisW = 60;
+      try {
+        const w = chartRef.current.priceScale('right').width();
+        if (typeof w === 'number' && Number.isFinite(w) && w > 0) axisW = w;
+      } catch {
+        // eje aun no listo
+      }
+      const candlesApi = candleRef.current;
+      const yOf = (p: number): number | null => {
+        try {
+          const v = candlesApi.priceToCoordinate(p);
+          return typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= H ? v : null;
+        } catch {
+          return null;
+        }
+      };
+      const bars = vpRowRects(vp.rows, vp.maxVolume, yOf, W - axisW - 2, VP_MAX_WIDTH);
+      if (bars.length) {
+        const pocY = vp.poc ? yOf(vp.poc.price) : null;
+        const { refClose, ext } = fibFmtRef.current;
+        vpView = {
+          bars,
+          pocY,
+          tag: vp.poc ? `VP POC ${formatAxisPrice(vp.poc.price, refClose, ext)} | ${compactNumber(vp.poc.total)}` : null,
+        };
+      }
+    } catch {
+      vpView = null;
     }
   }
 
@@ -2222,27 +2304,6 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
   // dibujo y se recoge dentro del contenedor. El arrastre manual la fija
   // por fibo y se recuerda al reseleccionar.
   const manualBarPos = selectedFib ? fibBarPos[selectedFib.id] : undefined;
-  // Medida fijada a pixeles del frame actual (solo overlay: la vista no se mueve).
-  let measuredView: { x: number; y: number; w: number; h: number; label: string; up: boolean } | null = null;
-  if (measured && chartRef.current && candleRef.current) {
-    try {
-      const ax = xAtTimeMs(chartRef.current, measured.a.time);
-      const bx = xAtTimeMs(chartRef.current, measured.b.time);
-      const ay = candleRef.current.priceToCoordinate(measured.a.price);
-      const by = candleRef.current.priceToCoordinate(measured.b.price);
-      if (typeof ax === 'number' && typeof bx === 'number' && typeof ay === 'number' && typeof by === 'number' &&
-        [ax, bx, ay, by].every((v) => Number.isFinite(v))) {
-        measuredView = {
-          x: Math.min(ax, bx), y: Math.min(ay, by),
-          w: Math.max(Math.abs(bx - ax), 1), h: Math.max(Math.abs(by - ay), 1),
-          label: measured.label, up: measured.up,
-        };
-      }
-    } catch {
-      measuredView = null;
-    }
-  }
-
   let fibBarAuto: { x: number; y: number } | null = null;
   if (selectedFib && !manualBarPos && chartRef.current && candleRef.current && containerRef.current) {
     try {
@@ -2554,9 +2615,36 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
                 return (<polygon key="ghost-tri" points={`${g.ax},${g.ay} ${g.bx},${g.by} ${g.ax},${g.by}`} fill="none" stroke={stroke} strokeWidth={1} className="fib-ghost-line" />);
               case 'PRICE_LINE':
                 return hline(g.by, 0, W, 'ghost-price');
+              case 'MEASURE': {
+                const color = g.up ? COLORS.up : COLORS.down;
+                const text = g.label ?? '';
+                const lw = text.length * 6.2 + 16;
+                const lx = Math.min(Math.max(Math.min(g.ax, g.bx) + Math.abs(dx) / 2 - lw / 2, 8), Math.max(W - lw - 8, 8));
+                const ly = Math.max(Math.min(g.ay, g.by) - 30, 8);
+                return (<g key="ghost-measure">
+                  <rect x={Math.min(g.ax, g.bx)} y={Math.min(g.ay, g.by)} width={Math.max(Math.abs(dx), 1)} height={Math.max(Math.abs(dy), 1)} fill={hexWithAlpha(color, 0.12) ?? 'transparent'} stroke={color} strokeWidth={1} strokeDasharray="3 2" className="fib-ghost-line" />
+                  {text !== '' && (<>
+                    <rect x={lx} y={ly} width={lw} height={20} rx={4} fill="rgba(10,10,10,0.92)" stroke={color} strokeWidth={1} className="fib-ghost-line" />
+                    <text x={lx + lw / 2} y={ly + 10} textAnchor="middle" dominantBaseline="middle" fontSize={11} fill="#f5f7fa" className="measure-ghost-label">{text}</text>
+                  </>)}
+                </g>);
+              }
               default:
                 return seg(g.ax, g.ay, g.bx, g.by, 'ghost-seg');
             }
+          })()}
+          {measuredView && (() => {
+            const v = measuredView;
+            const Wm = containerRef.current?.clientWidth || 0;
+            const color = v.up ? COLORS.up : COLORS.down;
+            const lw = v.label.length * 6.2 + 16;
+            const lx = Math.min(Math.max(v.x + v.w / 2 - lw / 2, 8), Math.max(Wm - lw - 8, 8));
+            const ly = Math.max(v.y - 30, 8);
+            return (<g key="measured">
+              <rect x={v.x} y={v.y} width={v.w} height={v.h} fill={hexWithAlpha(color, 0.12) ?? 'transparent'} stroke={color} strokeWidth={1} strokeDasharray="3 2" className="measure-line" />
+              <rect x={lx} y={ly} width={lw} height={20} rx={4} fill="rgba(10,10,10,0.92)" stroke={color} strokeWidth={1} className="measure-label-box" />
+              <text x={lx + lw / 2} y={ly + 10} textAnchor="middle" dominantBaseline="middle" fontSize={11} fill="#f5f7fa" className="measure-label">{v.label}</text>
+            </g>);
           })()}
         </svg>
       )}
@@ -2572,6 +2660,24 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
             </span>
           ))}
         </div>
+      )}
+      {vpView && vpView.bars.length > 0 && (
+        <>
+          <svg className="vp-overlay" aria-hidden="true">
+            {vpView.pocY != null && (
+              <line x1={0} y1={vpView.pocY} x2="100%" y2={vpView.pocY} stroke={COLORS.accent} strokeOpacity={0.55} strokeWidth={1.2} strokeDasharray="4 3" className="vp-poc-line" />
+            )}
+            {vpView.bars.map((b, i) => (
+              <g key={i}>
+                <rect x={b.x} y={b.top} width={b.downWidth} height={b.height} fill={b.poc ? 'rgba(242,201,76,0.30)' : 'rgba(242,54,69,0.32)'} className="vp-row" />
+                <rect x={b.x + b.downWidth} y={b.top} width={b.upWidth} height={b.height} fill={b.poc ? 'rgba(242,201,76,0.42)' : 'rgba(0,192,135,0.32)'} className="vp-row" />
+              </g>
+            ))}
+          </svg>
+          {vpView.tag && (
+            <div className="vp-tag" style={{ borderColor: COLORS.accent }}>{vpView.tag}</div>
+          )}
+        </>
       )}
       {maTags && (
         <>
@@ -2686,37 +2792,10 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
             writeChartTimezone(v);
           }}
           aria-label="Zona horaria del chart"
-              case 'MEASURE': {
-                const color = g.up ? COLORS.up : COLORS.down;
-                const text = g.label ?? '';
-                const lw = text.length * 6.2 + 16;
-                const lx = Math.min(Math.max(Math.min(g.ax, g.bx) + Math.abs(dx) / 2 - lw / 2, 8), Math.max(W - lw - 8, 8));
-                const ly = Math.max(Math.min(g.ay, g.by) - 30, 8);
-                return (<g key="ghost-measure">
-                  <rect x={Math.min(g.ax, g.bx)} y={Math.min(g.ay, g.by)} width={Math.max(Math.abs(dx), 1)} height={Math.max(Math.abs(dy), 1)} fill={hexWithAlpha(color, 0.12) ?? 'transparent'} stroke={color} strokeWidth={1} strokeDasharray="3 2" className="fib-ghost-line" />
-                  {text !== '' && (<>
-                    <rect x={lx} y={ly} width={lw} height={20} rx={4} fill="rgba(10,10,10,0.92)" stroke={color} strokeWidth={1} className="fib-ghost-line" />
-                    <text x={lx + lw / 2} y={ly + 10} textAnchor="middle" dominantBaseline="middle" fontSize={11} fill="#f5f7fa" className="measure-ghost-label">{text}</text>
-                  </>)}
-                </g>);
-              }
         >
           {CHART_TIMEZONES.map((z) => (
             <option key={z} value={z}>
               {zoneOffsetLabel(z, nowMs)} {zoneShortName(z)}
-          {measuredView && (() => {
-            const v = measuredView;
-            const Wm = containerRef.current?.clientWidth || 0;
-            const color = v.up ? COLORS.up : COLORS.down;
-            const lw = v.label.length * 6.2 + 16;
-            const lx = Math.min(Math.max(v.x + v.w / 2 - lw / 2, 8), Math.max(Wm - lw - 8, 8));
-            const ly = Math.max(v.y - 30, 8);
-            return (<g key="measured">
-              <rect x={v.x} y={v.y} width={v.w} height={v.h} fill={hexWithAlpha(color, 0.12) ?? 'transparent'} stroke={color} strokeWidth={1} strokeDasharray="3 2" className="measure-line" />
-              <rect x={lx} y={ly} width={lw} height={20} rx={4} fill="rgba(10,10,10,0.92)" stroke={color} strokeWidth={1} className="measure-label-box" />
-              <text x={lx + lw / 2} y={ly + 10} textAnchor="middle" dominantBaseline="middle" fontSize={11} fill="#f5f7fa" className="measure-label">{v.label}</text>
-            </g>);
-          })()}
             </option>
           ))}
         </select>

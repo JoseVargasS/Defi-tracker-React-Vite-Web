@@ -181,6 +181,56 @@ export function calculateVolumeProfile(data: Candle[], rowCount = 48) {
   return { rows, poc, maxVolume };
 }
 
+export interface VpRowInput {
+  high: number;
+  low: number;
+  up: number;
+  down: number;
+  total: number;
+  poc: boolean;
+}
+
+export interface VpBarRect {
+  top: number;
+  height: number;
+  x: number;
+  width: number;
+  upWidth: number;
+  downWidth: number;
+  poc: boolean;
+}
+
+// Filas del perfil a rects en pixeles, anclados al borde derecho estilo TV.
+// Puro y testeable: el chart solo aporta yOf/xRight/maxWidth.
+export function vpRowRects(
+  rows: VpRowInput[],
+  maxVolume: number,
+  yOf: (price: number) => number | null,
+  xRight: number,
+  maxWidth: number,
+): VpBarRect[] {
+  if (!(maxVolume > 0) || !(maxWidth > 0)) return [];
+  const out: VpBarRect[] = [];
+  for (const row of rows) {
+    if (!(row.total > 0)) continue;
+    const yTop = yOf(row.high);
+    const yBottom = yOf(row.low);
+    if (yTop == null || yBottom == null || !Number.isFinite(yTop) || !Number.isFinite(yBottom)) continue;
+    const width = Math.max(1, (row.total / maxVolume) * maxWidth);
+    const upWidth = row.total > 0 ? width * (row.up / row.total) : 0;
+    out.push({
+      top: Math.min(yTop, yBottom),
+      height: Math.max(1.5, Math.abs(yBottom - yTop)),
+      x: xRight - width,
+      width,
+      upWidth,
+      downWidth: width - upWidth,
+      poc: row.poc,
+    });
+  }
+  return out;
+}
+
 export function calculateBollingerBands(
   data: Candle[],
   period = 20,

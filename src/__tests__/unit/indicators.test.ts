@@ -7,7 +7,9 @@ import {
   calculateRSI,
   calculateSMA,
   calculateEMA,
+  vpRowRects,
   CHART_THEME,
+  type VpRowInput,
 } from '@/lib/chart/indicators';
 import type { Candle } from '@/lib/chart/normalize';
 
@@ -174,6 +176,40 @@ describe('calculateVolumeProfile', () => {
     expect(result.rows).toEqual([]);
     expect(result.poc).toBeNull();
     expect(result.maxVolume).toBe(0);
+  });
+});
+
+describe('vpRowRects', () => {
+  const rows: VpRowInput[] = [
+    { high: 110, low: 100, up: 60, down: 40, total: 100, poc: false },
+    { high: 120, low: 110, up: 150, down: 50, total: 200, poc: true },
+  ];
+  const yOf = (p: number) => 500 - p;
+
+  it('anchors bars to the right edge scaled by volume', () => {
+    const rects = vpRowRects(rows, 200, yOf, 400, 140);
+    expect(rects).toHaveLength(2);
+    // Mitad del maximo -> mitad del ancho, pegado a la derecha.
+    expect(rects[0]!.width).toBeCloseTo(70, 5);
+    expect(rects[0]!.x).toBeCloseTo(330, 5);
+    expect(rects[1]!.width).toBeCloseTo(140, 5);
+    expect(rects[1]!.x).toBeCloseTo(260, 5);
+    // Reparto verde/rojo proporcional.
+    expect(rects[0]!.upWidth).toBeCloseTo(42, 5);
+    expect(rects[0]!.downWidth).toBeCloseTo(28, 5);
+    expect(rects[0]!.upWidth + rects[0]!.downWidth).toBeCloseTo(rects[0]!.width, 5);
+    expect(rects[1]!.poc).toBe(true);
+    expect(rects[0]!.poc).toBe(false);
+  });
+
+  it('skips empty rows and bad geometry', () => {
+    expect(vpRowRects([], 200, yOf, 400, 140)).toEqual([]);
+    expect(vpRowRects(rows, 0, yOf, 400, 140)).toEqual([]);
+    expect(vpRowRects(
+      [{ high: 110, low: 100, up: 0, down: 0, total: 0, poc: false }],
+      200, yOf, 400, 140,
+    )).toEqual([]);
+    expect(vpRowRects(rows, 200, () => null, 400, 140)).toEqual([]);
   });
 });
 
