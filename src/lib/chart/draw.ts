@@ -4,13 +4,13 @@ export type DrawKind =
   | 'SEGMENT' | 'LINE' | 'RAY' | 'ARROW'
   | 'H_SEGMENT' | 'H_LINE' | 'H_RAY'
   | 'RECT' | 'CIRCLE' | 'TRIANGLE'
-  | 'PRICE_LINE';
+  | 'PRICE_LINE' | 'MEASURE';
 
 const DRAW_KINDS: readonly DrawKind[] = [
   'SEGMENT', 'LINE', 'RAY', 'ARROW',
   'H_SEGMENT', 'H_LINE', 'H_RAY',
   'RECT', 'CIRCLE', 'TRIANGLE',
-  'PRICE_LINE',
+  'PRICE_LINE', 'MEASURE',
 ];
 
 export function isDrawKind(value: unknown): value is DrawKind {
@@ -80,5 +80,6 @@ export function drawKindLabel(kind: DrawKind): string {
     case 'CIRCLE': return 'Círculo';
     case 'TRIANGLE': return 'Triángulo';
     case 'PRICE_LINE': return 'Línea de precio';
+    case 'MEASURE': return 'Medir';
   }
 }

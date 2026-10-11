@@ -172,5 +172,6 @@ describe('draw', () => {
   it('labels kinds in spanish', () => {
     expect(drawKindLabel('SEGMENT')).toBe('Segmento');
     expect(drawKindLabel('PRICE_LINE')).toBe('Línea de precio');
+    expect(drawKindLabel('MEASURE')).toBe('Medir');
   });
 });

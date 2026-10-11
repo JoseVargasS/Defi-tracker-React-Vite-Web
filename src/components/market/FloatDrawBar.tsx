@@ -24,10 +24,20 @@ const TOOLS: ToolDef[] = [
     title: 'Fibonacci',
     glyph: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <line x1="4" y1="5" x2="20" y2="5" />
+        <line x1="4" y1="10" x2="15" y2="10" />
+        <line x1="4" y1="15" x2="18" y2="15" />
+        <line x1="4" y1="20" x2="12" y2="20" />
+      </svg>
+    ),
+  },
+  {
+    tool: 'MEASURE',
+    title: 'Medir',
+    glyph: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
         <path d="M4 20L20 4" />
-        <line x1="4" y1="16" x2="12" y2="16" />
-        <line x1="4" y1="12" x2="14" y2="12" />
-        <line x1="4" y1="8" x2="12" y2="8" />
+        <path d="M6.8 14.8l2.4 2.4M9.8 11.8l2.4 2.4M12.8 8.8l2.4 2.4M15.8 5.8l2.4 2.4" />
       </svg>
     ),
   },

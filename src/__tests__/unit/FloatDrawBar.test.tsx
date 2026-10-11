@@ -15,19 +15,20 @@ describe('FloatDrawBar', () => {
   it('renders drawing tools', () => {
     render(<FloatDrawBar />);
     expect(screen.getByTitle('Fibonacci')).toBeTruthy();
+    expect(screen.getByTitle('Medir')).toBeTruthy();
     expect(screen.getByTitle('Rectángulo')).toBeTruthy();
     expect(screen.getByTitle('Cursor')).toBeTruthy();
   });
 
-  it('renders all twelve draw kinds', () => {
+  it('renders all thirteen draw kinds', () => {
     const { container } = render(<FloatDrawBar />);
     for (const title of [
-      'Fibonacci', 'Segmento', 'Línea', 'Rayo', 'Flecha', 'Segmento H',
+      'Fibonacci', 'Medir', 'Segmento', 'Línea', 'Rayo', 'Flecha', 'Segmento H',
       'Línea H', 'Recta H', 'Rectángulo', 'Círculo', 'Triángulo', 'Línea de precio',
     ]) {
       expect(screen.getByTitle(title)).toBeTruthy();
     }
-    expect(container.querySelectorAll('.float-draw-btn').length).toBe(14);
+    expect(container.querySelectorAll('.float-draw-btn').length).toBe(15);
   });
 
   it('toggles the fibo tool', () => {
@@ -36,6 +37,12 @@ describe('FloatDrawBar', () => {
     expect(useMarketStore.getState().chartIndicators.drawTool).toBe('FIBO');
     fireEvent.click(screen.getByTitle('Fibonacci'));
     expect(useMarketStore.getState().chartIndicators.drawTool).toBeNull();
+  });
+
+  it('selects the measure tool', () => {
+    render(<FloatDrawBar />);
+    fireEvent.click(screen.getByTitle('Medir'));
+    expect(useMarketStore.getState().chartIndicators.drawTool).toBe('MEASURE');
   });
 
   it('selects draw kinds', () => {

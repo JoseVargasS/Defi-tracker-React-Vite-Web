@@ -298,10 +298,10 @@ describe('App', () => {
     expect(screen.getByText('MA')).toBeTruthy();
   });
 
-  it('shows measure tool button', () => {
+  it('keeps measure out of the top toolbar (lateral only)', () => {
     useMarketStore.setState({ currentPair: 'BTCUSDT' });
     render(<App />);
-    expect(screen.getByLabelText('Medir rango de precio')).toBeTruthy();
+    expect(screen.queryByLabelText('Medir rango de precio')).toBeNull();
   });
 
   it('shows color picker button', () => {

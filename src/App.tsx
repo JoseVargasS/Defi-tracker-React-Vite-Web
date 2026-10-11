@@ -48,7 +48,6 @@ export default function App() {
   const lastPrices = useMarketStore((s) => s.lastPrices);
   const [stats24h, setStats24h] = useState<Stats24h | null>(null);
   const [chartResetSignal, setChartResetSignal] = useState(0);
-  const [measureActive, setMeasureActive] = useState(false);
   const chartRef = useRef<ChartHandle>(null);
   const title = headerLabel(currentPair ?? '');
   // En vivo manda el socket; lastPrices solo lo alimenta spot; el detail es el piso.
@@ -263,8 +262,6 @@ export default function App() {
                   </div>
                   <ChartToolbar
                     chartRef={chartRef}
-                    measureActive={measureActive}
-                    onMeasureActiveChange={setMeasureActive}
                     onResetChart={() => setChartResetSignal((n) => n + 1)}
                   />
                 </div>
@@ -287,7 +284,6 @@ export default function App() {
                         symbol={currentPair}
                         interval={currentInterval}
                         indicators={chartIndicators}
-                        measureActive={measureActive}
                         resetSignal={chartResetSignal}
                       />
                     </Suspense>

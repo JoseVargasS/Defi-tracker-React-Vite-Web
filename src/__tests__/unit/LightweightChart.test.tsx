@@ -738,6 +738,48 @@ describe('LightweightChart', () => {
       'fib_overlays_BTCUSDT',
       'f1;60000;100;3600000;110;#FFFFFF;1;0.5+1;0;1',
     );
+  it('previews measure range with live label while drawing', async () => {
+    useMarketStore.setState({
+      chartIndicators: { ...indicators(), drawTool: 'MEASURE' },
+    });
+    const { container } = render(
+      <LightweightChart
+        symbol="BTCUSDT"
+        interval="1h"
+        indicators={{ ...indicators(), drawTool: 'MEASURE' }}
+        overlaysTick={0}
+        resetSignal={0}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByText(/C 160\.00/)).toBeTruthy();
+    });
+    const el = container.querySelector('.lw-container') as HTMLElement;
+    el.getBoundingClientRect = () => ({ left: 0, top: 0, right: 800, bottom: 500, width: 800, height: 500, x: 0, y: 0, toJSON: () => ({}) });
+    const { createChart } = await import('lightweight-charts');
+    const chartApi = vi.mocked(createChart).mock.results.at(-1)?.value as unknown as {
+      subscribeClick: ReturnType<typeof vi.fn>;
+    };
+    const click = chartApi.subscribeClick.mock.calls[0]?.[0] as ((p: object) => void) | undefined;
+    el.dispatchEvent(new MouseEvent('mousemove', { clientX: 100, clientY: 250, bubbles: true }));
+    click?.({});
+    el.dispatchEvent(new MouseEvent('mousemove', { clientX: 200, clientY: 300, bubbles: true }));
+    await waitFor(() => {
+      const label = container.querySelector('.measure-ghost-label');
+      expect(label?.textContent).toContain('12 velas');
+      expect(label?.textContent).toContain('%');
+    });
+    click?.({});
+    await waitFor(() => {
+      const label = container.querySelector('.measure-label');
+      expect(label?.textContent).toContain('12 velas');
+    });
+    expect(container.querySelector('.measure-ghost-label')).toBeNull();
+    useMarketStore.setState({
+      chartIndicators: { ...indicators(), drawTool: null },
+    });
+  });
+
     const { container } = render(<LightweightChart symbol="BTCUSDT" interval="1h" indicators={indicators()} overlaysTick={0} resetSignal={0} />);
     await waitFor(() => {
       expect(screen.getByText(/C 160\.00/)).toBeTruthy();

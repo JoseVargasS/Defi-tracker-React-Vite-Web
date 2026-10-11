@@ -165,9 +165,12 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
   const [fibLines, setFibLines] = useState<
     { fibId: string; x1: number; y1: number; x2: number; y2: number; color: string; width: number; dimmed: boolean }[]
   >([]);
-  const [ghostFib, setGhostFib] = useState<{ tool: string; ax: number; ay: number; bx: number; by: number } | null>(null);
-  const ghostPxRef = useRef<{ tool: string; ax: number; ay: number; bx: number; by: number } | null>(null);
+  const [ghostFib, setGhostFib] = useState<{ tool: string; ax: number; ay: number; bx: number; by: number; label?: string; up?: boolean } | null>(null);
+  const ghostPxRef = useRef<{ tool: string; ax: number; ay: number; bx: number; by: number; label?: string; up?: boolean } | null>(null);
+  // Medida estilo TV: efimera (no persiste), una sola visible hasta cambiar de herramienta.
+  const [measured, setMeasured] = useState<{ a: { time: number; price: number }; b: { time: number; price: number }; label: string; up: boolean } | null>(null);
   const [hoverFibId, setHoverFibId] = useState<string | null>(null);
+  const prevToolRef = useRef<string | null>(null);
   const hoverIdRef = useRef<string | null>(null);
   const [selectedFibId, setSelectedFibId] = useState<string | null>(null);
   const [fibBarPos, setFibBarPos] = useState<Record<string, { x: number; y: number }>>({});
@@ -679,6 +682,18 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => {
       onResize();
       if (!labelsQueued) {
+    // Etiqueta estilo TV para Medir: % | delta | velas (solo overlay, no toca series).
+    const measureLabel = (a: { time: number; price: number }, tB: number, pB: number): { label: string; up: boolean } => {
+      const data = candlesRef.current;
+      const step = data.length >= 2 ? data[data.length - 1]!.time - data[data.length - 2]!.time : 0;
+      const bars = step > 0 ? Math.round(Math.abs(tB - a.time) / step) + 1 : 0;
+      const delta = pB - a.price;
+      const pct = a.price ? (delta / a.price) * 100 : 0;
+      const up = delta >= 0;
+      const label = `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}% | ${delta >= 0 ? '+' : ''}${formatPriceForChart(delta, extendedRef.current)} | ${bars} velas`;
+      return { label, up };
+    };
+
         labelsQueued = true;
         rafThrottle(() => {
           labelsQueued = false;
@@ -894,7 +909,26 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
         setGhostFib(null);
         return;
       }
-      const next = { tool, ax, ay, bx: mouse.x, by: mouse.y };
+      const next = { tool, ax, ay, bx: mouse.x, by: mouse.y } as { tool: string; ax: number; ay: number; bx: number; by: number; label?: string; up?: boolean };
+      // Medir resuelve cursor a tiempo/precio para la etiqueta en vivo.
+      if (tool === 'MEASURE') {
+        const tB = timeAtX(mouse.x);
+        let pB: number | null = null;
+        try {
+          const p = candlesApi.coordinateToPrice(mouse.y);
+          if (typeof p === 'number' && Number.isFinite(p)) pB = p;
+        } catch {
+          pB = null;
+        }
+        if (tB == null || pB == null) {
+          ghostPxRef.current = null;
+          setGhostFib(null);
+          return;
+        }
+        const m = measureLabel(pending, tB, pB);
+        next.label = m.label;
+        next.up = m.up;
+      }
       const prev = ghostPxRef.current;
       if (
         prev && prev.tool === next.tool &&
@@ -1217,6 +1251,15 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       // encoger toda la historia (fitContent la deja ilegible).
       try {
         chart.timeScale().setVisibleLogicalRange({
+      // Medir no persiste: queda una sola medida hasta cambiar de herramienta.
+      if (tool === 'MEASURE') {
+        const m = measureLabel(start, end.time, end.price);
+        setMeasured({ a: { ...start }, b: { ...end }, label: m.label, up: m.up });
+        pendingRef.current = null;
+        setDrawStep(0);
+        clearGhost();
+        return;
+      }
           from: Math.max(0, data.length - INITIAL_VISIBLE_BARS),
           to: data.length + INITIAL_RIGHT_OFFSET_BARS,
         });
@@ -1272,9 +1315,10 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     };
   }, [symbol, interval, applyTimezone, refreshFibLabels, refreshFibLines, refreshCountdown, refreshMaTags, syncFibDefs, xAtTimeMs]);
 
-  // Si se suelta la herramienta a medias, se limpia el fantasma y el pendiente.
+  // Si cambia la herramienta (o se suelta), se limpian fantasma, pendiente y medida.
   useEffect(() => {
-    if (indicators.drawTool) return;
+    if (prevToolRef.current === indicators.drawTool) return;
+    prevToolRef.current = indicators.drawTool;
     pendingRef.current = null;
     ghostPxRef.current = null;
     setGhostFib(null);
@@ -1339,9 +1383,14 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
     const ext = extendedRef.current;
     const refClose = data[data.length - 1]!.close;
     fibFmtRef.current = { refClose, ext };
+    setMeasured(null);
     const fmtP = (v: number): string => {
       const s = formatAxisPrice(v, refClose, ext);
       return /^-0\.0+$/.test(s) ? s.slice(1) : s;
+  useEffect(() => {
+    setMeasured(null);
+  }, [symbol]);
+
     };
     const chips: { color: string; text: string }[] = [];
     // Leyendas dentro de cada subpanel, como la app (los chips de arriba se quedan).
@@ -2102,6 +2151,27 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
   // dibujo y se recoge dentro del contenedor. El arrastre manual la fija
   // por fibo y se recuerda al reseleccionar.
   const manualBarPos = selectedFib ? fibBarPos[selectedFib.id] : undefined;
+  // Medida fijada a pixeles del frame actual (solo overlay: la vista no se mueve).
+  let measuredView: { x: number; y: number; w: number; h: number; label: string; up: boolean } | null = null;
+  if (measured && chartRef.current && candleRef.current) {
+    try {
+      const ax = xAtTimeMs(chartRef.current, measured.a.time);
+      const bx = xAtTimeMs(chartRef.current, measured.b.time);
+      const ay = candleRef.current.priceToCoordinate(measured.a.price);
+      const by = candleRef.current.priceToCoordinate(measured.b.price);
+      if (typeof ax === 'number' && typeof bx === 'number' && typeof ay === 'number' && typeof by === 'number' &&
+        [ax, bx, ay, by].every((v) => Number.isFinite(v))) {
+        measuredView = {
+          x: Math.min(ax, bx), y: Math.min(ay, by),
+          w: Math.max(Math.abs(bx - ax), 1), h: Math.max(Math.abs(by - ay), 1),
+          label: measured.label, up: measured.up,
+        };
+      }
+    } catch {
+      measuredView = null;
+    }
+  }
+
   let fibBarAuto: { x: number; y: number } | null = null;
   if (selectedFib && !manualBarPos && chartRef.current && candleRef.current && containerRef.current) {
     try {
@@ -2345,7 +2415,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
           <span style={{ color: MACD_DEA_COLOR }}>DEA {paneLegends.macd.dea.toFixed(paneLegends.macd.p)}</span>
         </div>
       )}
-      {(fibLines.length > 0 || ghostFib) && (
+      {(fibLines.length > 0 || ghostFib || measuredView) && (
         <svg className="fib-lines-svg" aria-hidden="true">
           {fibLines.map((l, i) => (
             <line
@@ -2528,7 +2598,7 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
       })()}
       {indicators.drawTool && (
         <div className="lw-draw-hint">
-          {drawStep === 0 ? 'Toca el primer punto' : 'Toca el segundo punto'} · {indicators.drawTool === 'FIBO' ? 'Fibo' : indicators.drawTool}
+          {drawStep === 0 ? 'Toca el primer punto' : 'Toca el segundo punto'} · {indicators.drawTool === 'FIBO' ? 'Fibo' : drawKindLabel(indicators.drawTool as import('@/lib/chart/draw').DrawKind)}
         </div>
       )}
       <div className="lw-tz">
@@ -2545,10 +2615,37 @@ export default forwardRef<ChartHandle, LightweightChartProps>(function Lightweig
             writeChartTimezone(v);
           }}
           aria-label="Zona horaria del chart"
+              case 'MEASURE': {
+                const color = g.up ? COLORS.up : COLORS.down;
+                const text = g.label ?? '';
+                const lw = text.length * 6.2 + 16;
+                const lx = Math.min(Math.max(Math.min(g.ax, g.bx) + Math.abs(dx) / 2 - lw / 2, 8), Math.max(W - lw - 8, 8));
+                const ly = Math.max(Math.min(g.ay, g.by) - 30, 8);
+                return (<g key="ghost-measure">
+                  <rect x={Math.min(g.ax, g.bx)} y={Math.min(g.ay, g.by)} width={Math.max(Math.abs(dx), 1)} height={Math.max(Math.abs(dy), 1)} fill={hexWithAlpha(color, 0.12) ?? 'transparent'} stroke={color} strokeWidth={1} strokeDasharray="3 2" className="fib-ghost-line" />
+                  {text !== '' && (<>
+                    <rect x={lx} y={ly} width={lw} height={20} rx={4} fill="rgba(10,10,10,0.92)" stroke={color} strokeWidth={1} className="fib-ghost-line" />
+                    <text x={lx + lw / 2} y={ly + 10} textAnchor="middle" dominantBaseline="middle" fontSize={11} fill="#f5f7fa" className="measure-ghost-label">{text}</text>
+                  </>)}
+                </g>);
+              }
         >
           {CHART_TIMEZONES.map((z) => (
             <option key={z} value={z}>
               {zoneOffsetLabel(z, nowMs)} {zoneShortName(z)}
+          {measuredView && (() => {
+            const v = measuredView;
+            const Wm = containerRef.current?.clientWidth || 0;
+            const color = v.up ? COLORS.up : COLORS.down;
+            const lw = v.label.length * 6.2 + 16;
+            const lx = Math.min(Math.max(v.x + v.w / 2 - lw / 2, 8), Math.max(Wm - lw - 8, 8));
+            const ly = Math.max(v.y - 30, 8);
+            return (<g key="measured">
+              <rect x={v.x} y={v.y} width={v.w} height={v.h} fill={hexWithAlpha(color, 0.12) ?? 'transparent'} stroke={color} strokeWidth={1} strokeDasharray="3 2" className="measure-line" />
+              <rect x={lx} y={ly} width={lw} height={20} rx={4} fill="rgba(10,10,10,0.92)" stroke={color} strokeWidth={1} className="measure-label-box" />
+              <text x={lx + lw / 2} y={ly + 10} textAnchor="middle" dominantBaseline="middle" fontSize={11} fill="#f5f7fa" className="measure-label">{v.label}</text>
+            </g>);
+          })()}
             </option>
           ))}
         </select>

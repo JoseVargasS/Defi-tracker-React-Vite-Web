@@ -72,7 +72,7 @@ export interface CandlestickChartProps {
   symbol: string | null;
   interval: string;
   indicators: ChartIndicatorsState;
-  measureActive: boolean;
+  measureActive?: boolean;
   resetSignal: number;
 }
 
@@ -622,7 +622,7 @@ export default forwardRef<ChartHandle, CandlestickChartProps>(function Candlesti
   symbol,
   interval,
   indicators,
-  measureActive,
+  measureActive = false,
   resetSignal,
 }, ref) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
